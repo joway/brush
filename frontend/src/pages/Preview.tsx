@@ -37,7 +37,6 @@ export default function Preview() {
   const [canEdit, setCanEdit] = useState(false);
   const [ownerName, setOwnerName] = useState('');
   const [versionCount, setVersionCount] = useState(0);
-  const [activeVersion, setActiveVersion] = useState<number | null>(null);
   const [canDelete, setCanDelete] = useState(false);
   const [isSavingMeta, setIsSavingMeta] = useState(false);
   const [metaError, setMetaError] = useState('');
@@ -81,7 +80,6 @@ export default function Preview() {
       setCanDelete(meta.canDelete);
       setOwnerName(meta.owner.username);
       setVersionCount(meta.versionCount || 0);
-      setActiveVersion(null);
 
       const content = await fetchHtml(uuid);
       setHtml(content);
@@ -193,7 +191,6 @@ export default function Preview() {
       // Update local state
       setHtml(updatedHtml);
       setVersionCount(newVersion);
-      setActiveVersion(null);
 
       setModifyProgress('Done! Refreshing...');
 
@@ -292,7 +289,6 @@ export default function Preview() {
     try {
       const content = await fetchHtml(uuid, version);
       setHtml(content);
-      setActiveVersion(version);
       if (iframeRef.current) {
         iframeRef.current.srcdoc = content;
       }
