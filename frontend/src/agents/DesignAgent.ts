@@ -2,8 +2,10 @@ import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import {
   SYSTEM_PROMPT,
+  NAME_SYSTEM_PROMPT,
   getDesignPrompt,
   getModificationPrompt,
+  getNamePrompt,
   isProductRequirement,
   detectLanguage,
   getRejectionMessage,
@@ -82,6 +84,47 @@ export class DesignAgent {
     const html = await this.chat(prompt, options);
 
     return this.extractHtml(html);
+  }
+
+  /**
+   * Generate a short product name based on user description
+   */
+  async generatePrototypeName(userDescription: string): Promise<string> {
+    const prompt = getNamePrompt(userDescription);
+
+    if (this.provider === 'openai') {
+      if (!this.openaiClient) {
+        throw new Error('OpenAI client not initialized');
+      }
+
+      const completion = await this.openaiClient.chat.completions.create({
+        model: 'gpt-4-turbo-preview',
+        messages: [
+          { role: 'system', content: NAME_SYSTEM_PROMPT },
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0.4,
+      });
+
+      return (completion.choices[0]?.message?.content || 'Untitled Prototype').trim();
+    }
+
+    if (!this.anthropicClient) {
+      throw new Error('Anthropic client not initialized');
+    }
+
+    const response = await this.anthropicClient.messages.create({
+      model: 'claude-3-5-sonnet-20241022',
+      max_tokens: 50,
+      system: NAME_SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.4,
+    });
+
+    const content = response.content.find(
+      (block) => block.type === 'text'
+    ) as { text?: string } | undefined;
+    return (content?.text || 'Untitled Prototype').trim();
   }
 
   /**

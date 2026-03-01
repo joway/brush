@@ -7,8 +7,13 @@ import {
   fetchHistory,
   saveHistory,
   ConversationMessage,
+  fetchPrototypeMeta,
+  updatePrototypeMeta,
+  toggleLike,
+  downloadPrototypeHtml,
+  deletePrototype,
 } from '../utils/api';
-import { loadConfig } from '../utils/storage';
+import { loadConfig, getStoredUser } from '../utils/storage';
 import ChatMessage from '../components/ChatMessage';
 
 export default function Preview() {
@@ -24,6 +29,20 @@ export default function Preview() {
   const [conversationHistory, setConversationHistory] = useState<
     ConversationMessage[]
   >([]);
+  const [prototypeName, setPrototypeName] = useState('');
+  const [nameDraft, setNameDraft] = useState('');
+  const [isPublic, setIsPublic] = useState(false);
+  const [likesCount, setLikesCount] = useState(0);
+  const [liked, setLiked] = useState(false);
+  const [canEdit, setCanEdit] = useState(false);
+  const [ownerName, setOwnerName] = useState('');
+  const [versionCount, setVersionCount] = useState(0);
+  const [activeVersion, setActiveVersion] = useState<number | null>(null);
+  const [canDelete, setCanDelete] = useState(false);
+  const [isSavingMeta, setIsSavingMeta] = useState(false);
+  const [metaError, setMetaError] = useState('');
+
+  const currentUser = getStoredUser();
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const agentRef = useRef<DesignAgent | null>(null);
@@ -50,15 +69,30 @@ export default function Preview() {
 
     try {
       setIsLoading(true);
+      setMetaError('');
 
-      // Load HTML and conversation history in parallel
-      const [content, history] = await Promise.all([
-        fetchHtml(uuid),
-        fetchHistory(uuid),
-      ]);
+      const meta = await fetchPrototypeMeta(uuid);
+      setPrototypeName(meta.name);
+      setNameDraft(meta.name);
+      setIsPublic(meta.public);
+      setLikesCount(meta.likesCount);
+      setLiked(meta.liked);
+      setCanEdit(meta.canEdit);
+      setCanDelete(meta.canDelete);
+      setOwnerName(meta.owner.username);
+      setVersionCount(meta.versionCount || 0);
+      setActiveVersion(null);
 
+      const content = await fetchHtml(uuid);
       setHtml(content);
-      setConversationHistory(history);
+
+      if (meta.public || meta.canEdit) {
+        const history = await fetchHistory(uuid);
+        setConversationHistory(history);
+      } else {
+        setConversationHistory([]);
+      }
+
       setError('');
     } catch (err) {
       console.error('Failed to load HTML:', err);
@@ -70,6 +104,11 @@ export default function Preview() {
 
   const handleModify = async () => {
     if (!chatInput.trim()) {
+      return;
+    }
+
+    if (!canEdit) {
+      setError('Only the owner can edit this prototype.');
       return;
     }
 
@@ -127,11 +166,14 @@ export default function Preview() {
 
       setModifyProgress('Saving changes...');
 
+      const newVersion = versionCount + 1;
+
       // Add assistant response to history
       const assistantMessage: ConversationMessage = {
         role: 'assistant',
         content: 'Updated the prototype based on your feedback.',
         timestamp: new Date().toISOString(),
+        version: newVersion,
       };
 
       const updatedHistory = [...conversationHistory, newUserMessage, assistantMessage];
@@ -140,13 +182,18 @@ export default function Preview() {
       // Save updated HTML and history
       if (uuid) {
         await Promise.all([
-          saveHtml(uuid, updatedHtml),
+          saveHtml(uuid, updatedHtml, {
+            createVersion: true,
+            versionNumber: newVersion,
+          }),
           saveHistory(uuid, updatedHistory),
         ]);
       }
 
       // Update local state
       setHtml(updatedHtml);
+      setVersionCount(newVersion);
+      setActiveVersion(null);
 
       setModifyProgress('Done! Refreshing...');
 
@@ -167,6 +214,90 @@ export default function Preview() {
       );
       setIsModifying(false);
       setModifyProgress('');
+    }
+  };
+
+  const handleSaveMeta = async () => {
+    if (!uuid || !canEdit) {
+      return;
+    }
+    setIsSavingMeta(true);
+    setMetaError('');
+    try {
+      await updatePrototypeMeta(uuid, { name: nameDraft, public: isPublic });
+      setPrototypeName(nameDraft.trim() || prototypeName);
+    } catch (err) {
+      setMetaError(err instanceof Error ? err.message : 'Update failed');
+    } finally {
+      setIsSavingMeta(false);
+    }
+  };
+
+  const handleToggleLike = async () => {
+    if (!uuid) {
+      return;
+    }
+    if (!currentUser) {
+      setMetaError('Please sign in to like.');
+      return;
+    }
+    try {
+      const result = await toggleLike(uuid);
+      setLiked(result.liked);
+      setLikesCount(result.likesCount);
+    } catch (err) {
+      setMetaError(err instanceof Error ? err.message : 'Like failed');
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!uuid) {
+      return;
+    }
+    try {
+      const blob = await downloadPrototypeHtml(uuid);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `${(nameDraft || prototypeName || 'prototype').replace(/[^a-zA-Z0-9-_\\u4e00-\\u9fa5]+/g, '_')}.html`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setMetaError(err instanceof Error ? err.message : 'Download failed');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!uuid || !canDelete) {
+      return;
+    }
+    const confirmed = window.confirm(
+      'Delete this prototype and all its history? This cannot be undone.'
+    );
+    if (!confirmed) {
+      return;
+    }
+    try {
+      await deletePrototype(uuid);
+      navigate('/square');
+    } catch (err) {
+      setMetaError(err instanceof Error ? err.message : 'Delete failed');
+    }
+  };
+
+  const handleSelectVersion = async (version: number) => {
+    if (!uuid) {
+      return;
+    }
+    try {
+      const content = await fetchHtml(uuid, version);
+      setHtml(content);
+      setActiveVersion(version);
+      if (iframeRef.current) {
+        iframeRef.current.srcdoc = content;
+      }
+    } catch (err) {
+      setMetaError(err instanceof Error ? err.message : 'Failed to load version');
     }
   };
 
@@ -205,10 +336,99 @@ export default function Preview() {
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[var(--paper)] text-[var(--ink)] flex-col lg:flex-row">
+    <div className="h-screen w-screen overflow-hidden bg-[var(--paper)] text-[var(--ink)] flex flex-col">
+      <div className="border-b border-[var(--border)] bg-white/80 backdrop-blur">
+        <div className="mx-auto w-full px-5 py-4 flex items-center justify-between">
+          <button
+            onClick={() => navigate('/')}
+            className="text-base font-semibold text-[var(--ink)]"
+          >
+            Magic Brush
+          </button>
+          <div className="flex items-center gap-4 text-sm">
+            <button
+              onClick={() => navigate('/')}
+              className="text-[var(--ink-muted)] hover:text-[var(--ink)]"
+            >
+              Home
+            </button>
+            <button
+              onClick={() => navigate('/square')}
+              className="text-[var(--ink-muted)] hover:text-[var(--ink)]"
+            >
+              Square
+            </button>
+          </div>
+        </div>
+      </div>
+
+    <div className="flex h-full w-full overflow-hidden bg-[var(--paper)] text-[var(--ink)] flex-col lg:flex-row">
       {/* Left: Preview iframe */}
-      <div className="flex-1 relative p-5">
-        <div className="h-full w-full rounded-2xl border border-[var(--border)] bg-white shadow-[var(--shadow)] overflow-hidden">
+      <div className="flex-1 relative p-5 flex flex-col">
+        <div className="mb-4 flex flex-col gap-3">
+          <div className="text-xs text-[var(--ink-muted)]">
+            Owner: {ownerName || 'Unknown'}
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <input
+                value={nameDraft}
+                onChange={(e) => setNameDraft(e.target.value)}
+                disabled={!canEdit}
+                className="min-w-[220px] rounded-xl border border-[var(--border)] bg-white px-3 py-2 text-[var(--ink)] text-sm focus:outline-none focus:ring-1 focus:ring-black/70 disabled:bg-[var(--paper-2)]"
+              />
+              {canEdit && (
+                <label className="flex items-center gap-2 text-xs text-[var(--ink)]">
+                  <input
+                    type="checkbox"
+                    checked={isPublic}
+                    onChange={(e) => setIsPublic(e.target.checked)}
+                    className="h-4 w-4 accent-black"
+                  />
+                  Public
+                </label>
+              )}
+              {canEdit && (
+                <button
+                  onClick={handleSaveMeta}
+                  disabled={isSavingMeta}
+                  className="rounded-xl bg-black/90 hover:bg-black text-white text-sm px-4 py-2 disabled:bg-black/20 disabled:text-black/40"
+                >
+                  Save
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={handleDownload}
+                className="rounded-xl border border-[var(--border)] bg-white px-3 py-2 text-xs text-[var(--ink)] hover:bg-[var(--paper-2)]"
+              >
+                Download HTML
+              </button>
+              {canDelete && (
+                <button
+                  onClick={handleDelete}
+                  className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 hover:bg-red-100"
+                >
+                  Delete
+                </button>
+              )}
+              {isPublic && (
+                <button
+                  onClick={handleToggleLike}
+                  className="rounded-xl border border-[var(--border)] bg-white px-3 py-2 text-xs text-[var(--ink)] hover:bg-[var(--paper-2)]"
+                >
+                  {liked ? 'Liked' : 'Like'} · {likesCount}
+                </button>
+              )}
+            </div>
+          </div>
+          {metaError && (
+            <div className="text-xs text-[var(--ink-muted)]">{metaError}</div>
+          )}
+        </div>
+
+        <div className="flex-1 h-full w-full rounded-2xl border border-[var(--border)] bg-white shadow-[var(--shadow)] overflow-hidden">
           <iframe
             ref={iframeRef}
             srcDoc={html}
@@ -217,7 +437,6 @@ export default function Preview() {
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
           />
         </div>
-
       </div>
 
       {/* Right: Chat sidebar (always visible) */}
@@ -226,12 +445,6 @@ export default function Preview() {
         <div className="p-4 border-b border-[var(--border)]">
           <div className="flex items-center justify-between">
             <h2 className="text-[var(--ink)] font-semibold">Conversation</h2>
-            <button
-              onClick={() => navigate('/')}
-              className="text-xs text-[var(--ink-muted)] hover:text-[var(--ink)] underline"
-            >
-              Back
-            </button>
           </div>
           <p className="text-xs text-[var(--ink-muted)] mt-1">
             Keep iterating with focused instructions.
@@ -241,7 +454,7 @@ export default function Preview() {
         {/* Chat content */}
         <div className="flex-1 overflow-y-auto p-4">
           {/* Show welcome message if no history */}
-          {conversationHistory.length === 0 && (
+          {conversationHistory.length === 0 && canEdit && (
             <div className="text-[var(--ink-muted)] text-sm mb-4">
               <p className="mb-2 text-[var(--ink)]">
                 Describe what you'd like to change about the design:
@@ -254,10 +467,19 @@ export default function Preview() {
               </ul>
             </div>
           )}
+          {!canEdit && (
+            <div className="mb-4 p-3 bg-[var(--paper-2)] border border-[var(--border)] rounded-xl text-[var(--ink)] text-sm">
+              Only the owner can edit this prototype.
+            </div>
+          )}
 
           {/* Display conversation history */}
           {conversationHistory.map((message, index) => (
-            <ChatMessage key={index} message={message} />
+            <ChatMessage
+              key={index}
+              message={message}
+              onSelectVersion={handleSelectVersion}
+            />
           ))}
 
           {/* Scroll anchor */}
@@ -287,20 +509,21 @@ export default function Preview() {
             value={chatInput}
             onChange={(e) => setChatInput(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder="Describe your changes..."
+            placeholder={canEdit ? 'Describe your changes...' : 'Only the owner can edit'}
             rows={3}
             className="w-full px-3 py-2 bg-white border border-[var(--border)] rounded-xl text-[var(--ink)] placeholder-[var(--ink-muted)] focus:outline-none focus:ring-1 focus:ring-black/70 resize-none text-sm"
-            disabled={isModifying}
+            disabled={isModifying || !canEdit}
           />
           <button
             onClick={handleModify}
-            disabled={isModifying || !chatInput.trim()}
+            disabled={isModifying || !chatInput.trim() || !canEdit}
             className="w-full mt-2 bg-black/90 hover:bg-black disabled:bg-black/20 disabled:text-black/40 text-white py-2 rounded-xl transition-all disabled:cursor-not-allowed text-sm font-medium"
           >
             {isModifying ? 'Modifying...' : 'Apply Changes'}
           </button>
         </div>
       </div>
+    </div>
     </div>
   );
 }

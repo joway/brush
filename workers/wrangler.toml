@@ -1,11 +1,25 @@
-name = "magic-brush-api"
+name = "magic-brush"
 main = "src/index.ts"
 compatibility_date = "2023-12-18"
+
+# Runtime config (set secrets via `wrangler secret put`)
+[vars]
+AWS_REGION = "ap-southeast-1"
+SES_FROM_NAME = "Magic Brush"
+SES_FROM_EMAIL = "i@elsetech.app"
+EMAIL_CODE_SECRET = "Y4U7mM2ABgjAcya4wgzFLx7asPAQGm"
+ADMIN_EMAILS = "joway.w@gmail.com"
 
 # R2 bucket binding
 [[r2_buckets]]
 binding = "HTML_BUCKET"
-bucket_name = "magic-brush-html-files"
+bucket_name = "brush"
+
+# D1 database binding
+[[d1_databases]]
+binding = "DB"
+database_name = "brush"
+database_id = "6c572c43-7fcb-4227-a467-e840394b47d8"
 
 # CORS headers for frontend
 [env.production]

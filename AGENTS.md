@@ -93,7 +93,20 @@ Generate a COMPLETE, SINGLE HTML file with:
 - Self-contained (no external files)
 - Works offline
 
-#### 4. Design Quality Standards
+#### 4. Data & Interactivity Requirements
+
+**Rule**:
+```
+Use realistic mock data and show it by default. Make key flows interactive on that data.
+Do NOT use external images; use simple CSS shapes/gradients/placeholders instead.
+```
+
+**Implementation**:
+- Provide mock items for lists/cards/tables (e.g., posts, products, tasks)
+- Make interactions functional (e.g., list → detail view)
+- Avoid external images; illustrate visuals with CSS
+
+#### 5. Design Quality Standards
 
 **Visual Design**:
 - Modern, clean, professional UI
@@ -132,7 +145,11 @@ Think through:
 
 Then generate a single, complete HTML file that demonstrates this product prototype.
 
-CRITICAL: Use the same language as the user's description for all UI text in the HTML.
+CRITICAL:
+- Use the same language as the user's description for all UI text in the HTML.
+- Use realistic mock data and make it visible by default.
+- Ensure key interactions work on the mock data (e.g., list to detail view).
+- Do NOT use external images; use CSS shapes/gradients/placeholders instead.
 ```
 
 **Purpose**:

@@ -2,13 +2,24 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { nanoid } from 'nanoid';
 import { DesignAgent } from '../agents/DesignAgent';
-import { saveHtml, saveHistory, ConversationMessage } from '../utils/api';
+import {
+  saveHtml,
+  saveHistory,
+  ConversationMessage,
+  fetchMe,
+} from '../utils/api';
 import {
   saveConfig,
   saveCurrentUuid,
   detectProvider,
   loadConfig,
   clearConfig,
+  loadAuth,
+  clearAuth,
+  getStoredUser,
+  saveDraftDescription,
+  loadDraftDescription,
+  StoredUser,
 } from '../utils/storage';
 
 export default function Home() {
@@ -21,6 +32,11 @@ export default function Home() {
   const [error, setError] = useState('');
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
   const [hasStoredKey, setHasStoredKey] = useState(false);
+  const [isPublic, setIsPublic] = useState(true);
+
+  const [authUser, setAuthUser] = useState<StoredUser | null>(
+    getStoredUser()
+  );
 
   // Load API key from localStorage on mount
   useEffect(() => {
@@ -32,9 +48,35 @@ export default function Home() {
     } else {
       setShowApiKeyInput(true);
     }
+
+    const draft = loadDraftDescription();
+    if (draft) {
+      setDescription(draft);
+    }
+  }, []);
+
+  useEffect(() => {
+    const existing = loadAuth();
+    if (!existing) {
+      return;
+    }
+
+    fetchMe()
+      .then((user) => {
+        setAuthUser(user);
+      })
+      .catch(() => {
+        clearAuth();
+        setAuthUser(null);
+      });
   }, []);
 
   const handleDesign = async () => {
+    if (!authUser) {
+      navigate('/signin');
+      return;
+    }
+
     if (!apiKey.trim()) {
       setError('Please enter your API key');
       return;
@@ -85,6 +127,14 @@ export default function Home() {
         return;
       }
 
+      setProgress('Generating prototype name...');
+      let generatedName = 'Untitled Prototype';
+      try {
+        generatedName = await agent.generatePrototypeName(description);
+      } catch {
+        // fallback to default name
+      }
+
       // Generate UUID for this design
       const uuid = nanoid(10);
 
@@ -101,14 +151,21 @@ export default function Home() {
           role: 'assistant',
           content: 'Generated initial product prototype based on your description.',
           timestamp: new Date().toISOString(),
+          version: 1,
         },
       ];
 
       // Save HTML and history to R2
-      await Promise.all([
-        saveHtml(uuid, html),
-        saveHistory(uuid, initialHistory),
-      ]);
+      await saveHtml(uuid, html, {
+        name: generatedName,
+        public: isPublic,
+        createVersion: true,
+        versionNumber: 1,
+      });
+      await saveHistory(uuid, initialHistory);
+
+      setDescription('');
+      saveDraftDescription('');
 
       // Save current UUID
       saveCurrentUuid(uuid);
@@ -136,6 +193,48 @@ export default function Home() {
       <div className="pointer-events-none absolute -bottom-32 -left-16 h-80 w-80 rounded-full bg-black/5 blur-3xl"></div>
 
       <div className="mx-auto max-w-3xl px-5 py-16">
+        <div className="mb-6 flex items-center justify-between text-sm text-[var(--ink-muted)]">
+          <span>Magic Brush • Prototype Studio</span>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => navigate('/square')}
+              className="text-[var(--ink)] underline"
+            >
+              Square
+            </button>
+            {authUser ? (
+              <div className="relative group">
+                <button
+                  className="text-[var(--ink-muted)] hover:text-[var(--ink)]"
+                  title="Account"
+                >
+                  {authUser.username}
+                </button>
+                <div className="absolute right-0 top-full pt-2 opacity-0 invisible pointer-events-none group-hover:opacity-100 group-hover:visible group-hover:pointer-events-auto transition-opacity">
+                  <div className="w-32 rounded-lg border border-[var(--border)] bg-white shadow-sm">
+                    <button
+                      onClick={() => {
+                        clearAuth();
+                        setAuthUser(null);
+                      }}
+                      className="w-full px-3 py-2 text-left text-sm text-[var(--ink)] hover:bg-[var(--paper-2)] rounded-lg"
+                    >
+                      Sign out
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => navigate('/signin')}
+                className="text-[var(--ink)] underline"
+              >
+                Sign In
+              </button>
+            )}
+          </div>
+        </div>
+
         <div className="mb-10 text-center">
           <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-white px-3 py-1 text-xs text-[var(--ink-muted)] shadow-sm">
             <span className="h-2 w-2 rounded-full bg-black/60"></span>
@@ -240,7 +339,10 @@ export default function Home() {
             </label>
             <textarea
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e) => {
+                setDescription(e.target.value);
+                saveDraftDescription(e.target.value);
+              }}
               placeholder="Example: A todo list app with drag-and-drop sorting, focus mode, and categories..."
               rows={6}
               className="w-full px-4 py-3 bg-white border border-[var(--border)] rounded-xl text-[var(--ink)] placeholder-[var(--ink-muted)] focus:outline-none focus:ring-1 focus:ring-black/70 focus:border-black/60 resize-none"
@@ -264,6 +366,17 @@ export default function Home() {
               </div>
             </div>
           )}
+
+          {/* Public toggle */}
+          <label className="mb-6 flex items-center gap-3 text-sm text-[var(--ink)]">
+            <input
+              type="checkbox"
+              checked={isPublic}
+              onChange={(e) => setIsPublic(e.target.checked)}
+              className="h-4 w-4 accent-black"
+            />
+            Publish to Square (Public)
+          </label>
 
           {/* Design Button */}
           <button
@@ -295,6 +408,7 @@ export default function Home() {
           Powered by AI • Privacy-First • No Data Storage
         </div>
       </div>
+
     </div>
   );
 }

@@ -16,21 +16,28 @@ CRITICAL RULES:
    - No external dependencies (use CDN links if needed for frameworks)
    - Fully functional and interactive
 
-4. Design Quality:
+4. Data & Interactivity:
+   - Include realistic mock data for the core content (e.g., lists, cards, tables, posts)
+   - Make mock data visible in the UI by default
+   - Provide basic interactive flows that operate on the mock data (e.g., click a blog card to open a detail view)
+   - If the product naturally has detail pages, simulate navigation using tabs, modals, or view switches
+   - Do NOT use external images; use simple CSS shapes/gradients/placeholders to illustrate visuals
+
+5. Design Quality:
    - Modern, clean, professional UI
    - Responsive design (mobile-friendly)
    - Good color schemes and typography
    - Smooth animations and transitions
    - Accessible (proper semantic HTML, ARIA labels)
 
-5. Technical Requirements:
+6. Technical Requirements:
    - Use modern HTML5 features
    - Include meta viewport tag for mobile
    - Add reasonable default data/content
    - Make interactive elements functional (buttons, forms, navigation)
    - Use Tailwind CSS via CDN for styling (preferred)
 
-6. Code Quality:
+7. Code Quality:
    - Clean, well-structured code
    - Semantic HTML
    - Organized CSS (or Tailwind classes)
@@ -52,6 +59,11 @@ OUTPUT:
 
 Remember: The HTML must be a working prototype that users can immediately interact with.`;
 
+export const NAME_SYSTEM_PROMPT = `You are a product naming assistant.
+Return a short, clear product name.
+Use the same language as the user's description.
+Return ONLY the name text, no quotes, no extra punctuation.`;
+
 // Generate the design prompt based on user description
 export const getDesignPrompt = (userDescription: string): string => {
   return `User Product Description:
@@ -68,7 +80,10 @@ Think through:
 
 Then generate a single, complete HTML file that demonstrates this product prototype.
 
-CRITICAL: Use the same language as the user's description for all UI text in the HTML.`;
+CRITICAL:
+- Use the same language as the user's description for all UI text in the HTML.
+- Use realistic mock data and make it visible by default.
+- Ensure key interactions work on the mock data (e.g., list to detail view).`;
 };
 
 // Generate the modification prompt for iterative changes
@@ -97,6 +112,16 @@ CRITICAL:
 - Do not include markdown code blocks
 - Start with <!DOCTYPE html>
 - Maintain the same language as the original`;
+};
+
+// Generate a short product name based on user description
+export const getNamePrompt = (userDescription: string): string => {
+  return `User Product Description:
+${userDescription}
+
+Generate a short product name (max 6 words).
+CRITICAL: Use the same language as the user's description.
+Return ONLY the name.`;
 };
 
 // Validate if the input is a product requirement
