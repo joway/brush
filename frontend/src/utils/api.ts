@@ -2,7 +2,7 @@ import { getAuthToken, StoredUser } from './storage';
 
 // API base URL - will be the Workers endpoint
 const API_BASE_URL = import.meta.env.PROD
-  ? 'https://magic-brush-api.your-subdomain.workers.dev'
+  ? 'https://brush-api.elsetech.app'
   : 'http://localhost:8787';
 
 const authHeaders = (): Record<string, string> => {
