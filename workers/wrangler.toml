@@ -1,0 +1,12 @@
+name = "magic-brush-api"
+main = "src/index.ts"
+compatibility_date = "2023-12-18"
+
+# R2 bucket binding
+[[r2_buckets]]
+binding = "HTML_BUCKET"
+bucket_name = "magic-brush-html-files"
+
+# CORS headers for frontend
+[env.production]
+vars = { ENVIRONMENT = "production" }
