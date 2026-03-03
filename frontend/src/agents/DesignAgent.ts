@@ -165,7 +165,7 @@ export class DesignAgent {
     ];
 
     const stream = await this.openaiClient.chat.completions.create({
-      model: 'gpt-4-turbo-preview',
+      model: 'gpt-5.2',
       messages,
       stream: true,
       temperature: 0.7,
@@ -193,7 +193,7 @@ export class DesignAgent {
     }
 
     const stream = await this.anthropicClient.messages.stream({
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-opus-4-6',
       max_tokens: 4096,
       system: SYSTEM_PROMPT,
       messages: this.conversationHistory.map((msg) => ({
