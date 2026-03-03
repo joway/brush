@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Blog Article Example</title>
+  <style>
+    :root {
+      --bg: #f7f6f2;
+      --ink: #1d1d1b;
+      --muted: #5a5955;
+      --card: #ffffff;
+      --border: #dcd9cf;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Georgia", serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.7;
+    }
+
+    header {
+      padding: 40px 20px 24px;
+      text-align: center;
+      border-bottom: 1px solid var(--border);
+      background: var(--card);
+    }
+
+    header h1 {
+      margin: 0 0 8px;
+      font-size: 2.25rem;
+    }
+
+    header p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 1rem;
+    }
+
+    main {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 32px 20px 60px;
+    }
+
+    .meta {
+      color: var(--muted);
+      font-size: 0.95rem;
+      margin-bottom: 24px;
+    }
+
+    .embed-block {
+      margin: 32px 0;
+      padding: 16px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+
+    .embed-block h2 {
+      margin: 0 0 12px;
+      font-size: 1.2rem;
+    }
+
+    iframe {
+      width: 100%;
+      height: 600px;
+      border: 0;
+      border-radius: 10px;
+      background: #fff;
+    }
+
+    footer {
+      padding: 24px 20px 40px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>From Idea to Interactive</h1>
+    <p>A sample blog article showing an embedded AI-made page.</p>
+  </header>
+
+  <main>
+    <div class="meta">By Joway · March 3, 2026 · 6 min read</div>
+
+    <p>
+      This is a sample blog article demonstrating how to embed an AI-generated
+      interactive page inside a post. The iframe below could be anything—from a
+      flowchart animation to an interactive dashboard.
+    </p>
+
+    <div>
+      <iframe
+        src="http://localhost:8787/pages/PQbAd7yAjQ"
+        style="width:100%;height:600px;border:0;"
+        loading="lazy"
+      ></iframe>
+    </div>
+
+    <p>
+      You can continue writing around the embedded content. Readers will see the
+      interactive page inline, without leaving the article.
+    </p>
+  </main>
+
+  <footer>
+    Built with Magic Brush · Example content only
+  </footer>
+</body>
+</html>

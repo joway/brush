@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { fetchSquare, toggleLike, SquareItem } from '../utils/api';
+import { fetchPages, togglePageLike, SquareItem } from '../utils/api';
 import { getStoredUser } from '../utils/storage';
 
 export default function Square() {
@@ -17,11 +17,11 @@ export default function Square() {
     setIsLoading(true);
     setError('');
     try {
-      const data = await fetchSquare(sort, filter);
+      const data = await fetchPages(sort, filter);
       setItems(data);
     } catch (err) {
       if (err instanceof Error && err.message.includes('Unauthorized')) {
-        setError('Please sign in to view your prototypes.');
+      setError('Please sign in to view your pages.');
       } else {
         setError(err instanceof Error ? err.message : 'Failed to load');
       }
@@ -40,7 +40,7 @@ export default function Square() {
       return;
     }
     try {
-      const result = await toggleLike(id);
+      const result = await togglePageLike(id);
       setItems((prev) =>
         prev.map((item) =>
           item.id === id
@@ -89,7 +89,7 @@ export default function Square() {
           <div>
             <h1 className="text-3xl font-semibold font-['Fraunces']">Square</h1>
             <p className="text-sm text-[var(--ink-muted)] mt-1">
-              Explore public prototypes, sorted by latest or top likes.
+              Explore public pages, sorted by latest or top likes.
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -186,8 +186,8 @@ export default function Square() {
             {items.length === 0 && (
               <div className="text-sm text-[var(--ink-muted)]">
                 {filter === 'mine'
-                  ? 'You have not created any prototypes yet.'
-                  : 'No public prototypes yet.'}
+                  ? 'You have not created any pages yet.'
+                  : 'No public pages yet.'}
               </div>
             )}
           </div>

@@ -1,11 +1,11 @@
 # Magic Brush - AI-Powered Product Design Tool
 
-An AI-powered web application that helps users design and prototype products through natural language descriptions.
+An AI-powered web application for sharing AI-built pages and tools through natural language descriptions.
 
 ## Features
 
 - 🤖 AI-powered product design using OpenAI or Claude
-- 🎨 Generate interactive HTML prototypes
+- 🎨 Generate interactive HTML pages
 - 💬 Iterative refinement through chat
 - 🔒 Privacy-first: AI runs in your browser with your API key
 - ☁️ Deployed on Cloudflare infrastructure
@@ -91,7 +91,7 @@ npm run deploy
 
 1. **Enter your API key**: OpenAI or Claude API token
 2. **Describe your product**: Write what you want to build
-3. **Click "Design"**: AI generates an interactive prototype
+3. **Click "Design"**: AI generates an interactive page
 4. **Iterate**: Use the chat panel to refine the design
 
 ## Environment Variables

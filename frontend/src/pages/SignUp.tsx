@@ -39,7 +39,8 @@ export default function SignUp() {
       const result = await verifyEmailCode(
         email.trim(),
         code.trim(),
-        username.trim()
+        username.trim(),
+        'signup'
       );
       saveAuth(result.token, result.user);
       setStatus('Account created.');

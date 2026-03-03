@@ -6,11 +6,8 @@ import { cors } from 'hono/cors';
 type Bindings = {
   HTML_BUCKET: R2Bucket;
   DB: D1Database;
-  AWS_ACCESS_KEY_ID: string;
-  AWS_SECRET_ACCESS_KEY: string;
-  AWS_REGION: string;
-  SES_FROM_EMAIL: string;
-  SES_FROM_NAME?: string;
+  RESEND_API_KEY?: string;
+  RESEND_FROM_EMAIL?: string;
   EMAIL_CODE_SECRET: string;
   ADMIN_EMAILS?: string;
 };
@@ -58,150 +55,38 @@ const sha256Hex = async (input: string): Promise<string> => {
     .join('');
 };
 
-const hmacSha256 = async (
-  key: ArrayBuffer | Uint8Array,
-  data: string
-): Promise<ArrayBuffer> => {
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw',
-    key instanceof Uint8Array ? key : new Uint8Array(key),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
-  return crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(data));
-};
-
-const hmacHex = async (
-  key: ArrayBuffer | Uint8Array,
-  data: string
-): Promise<string> => {
-  const signature = await hmacSha256(key, data);
-  return Array.from(new Uint8Array(signature))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-};
-
-const getSignatureKey = async (
-  secret: string,
-  dateStamp: string,
-  region: string,
-  service: string
-): Promise<ArrayBuffer> => {
-  const kDate = await hmacSha256(encoder.encode(`AWS4${secret}`), dateStamp);
-  const kRegion = await hmacSha256(kDate, region);
-  const kService = await hmacSha256(kRegion, service);
-  return hmacSha256(kService, 'aws4_request');
-};
-
 const sendVerificationEmail = async (
   c: { env: Bindings },
   to: string,
   code: string
 ): Promise<void> => {
-  const { AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, SES_FROM_EMAIL } =
-    c.env;
+  const { RESEND_API_KEY, RESEND_FROM_EMAIL } = c.env;
 
-  if (
-    !AWS_ACCESS_KEY_ID ||
-    !AWS_SECRET_ACCESS_KEY ||
-    !AWS_REGION ||
-    !SES_FROM_EMAIL
-  ) {
-    console.error('SES config missing', {
-      hasAccessKey: Boolean(AWS_ACCESS_KEY_ID),
-      hasSecretKey: Boolean(AWS_SECRET_ACCESS_KEY),
-      hasRegion: Boolean(AWS_REGION),
-      hasFromEmail: Boolean(SES_FROM_EMAIL),
+  if (!RESEND_API_KEY || !RESEND_FROM_EMAIL) {
+    console.error('Resend config missing', {
+      hasApiKey: Boolean(RESEND_API_KEY),
+      hasFromEmail: Boolean(RESEND_FROM_EMAIL),
     });
-    throw new Error('SES configuration is missing');
+    throw new Error('Resend configuration is missing');
   }
 
-  const host = `email.${AWS_REGION}.amazonaws.com`;
-  const endpoint = `https://${host}/v2/email/outbound-emails`;
-  const method = 'POST';
-
-  const fromName = c.env.SES_FROM_NAME
-    ? `${c.env.SES_FROM_NAME} <${SES_FROM_EMAIL}>`
-    : SES_FROM_EMAIL;
-
-  const body = JSON.stringify({
-    FromEmailAddress: fromName,
-    Destination: {
-      ToAddresses: [to],
-    },
-    Content: {
-      Simple: {
-        Subject: {
-          Data: 'Your Magic Brush verification code',
-          Charset: 'UTF-8',
-        },
-        Body: {
-          Text: {
-            Data: `Your verification code is ${code}. It expires in 10 minutes.`,
-            Charset: 'UTF-8',
-          },
-        },
-      },
-    },
-  });
-
-  const now = new Date();
-  const amzDate = now
-    .toISOString()
-    .replace(/[:-]|\.[0-9]{3}/g, '')
-    .slice(0, 15) + 'Z';
-  const dateStamp = amzDate.slice(0, 8);
-
-  const payloadHash = await sha256Hex(body);
-  const canonicalHeaders =
-    `content-type:application/json\n` +
-    `host:${host}\n` +
-    `x-amz-date:${amzDate}\n`;
-  const signedHeaders = 'content-type;host;x-amz-date';
-  const canonicalRequest = [
-    method,
-    '/v2/email/outbound-emails',
-    '',
-    canonicalHeaders,
-    signedHeaders,
-    payloadHash,
-  ].join('\n');
-
-  const credentialScope = `${dateStamp}/${AWS_REGION}/ses/aws4_request`;
-  const stringToSign = [
-    'AWS4-HMAC-SHA256',
-    amzDate,
-    credentialScope,
-    await sha256Hex(canonicalRequest),
-  ].join('\n');
-
-  const signingKey = await getSignatureKey(
-    AWS_SECRET_ACCESS_KEY,
-    dateStamp,
-    AWS_REGION,
-    'ses'
-  );
-  const signature = await hmacHex(signingKey, stringToSign);
-
-  const authorization =
-    `AWS4-HMAC-SHA256 Credential=${AWS_ACCESS_KEY_ID}/${credentialScope}, ` +
-    `SignedHeaders=${signedHeaders}, Signature=${signature}`;
-
-  const response = await fetch(endpoint, {
-    method,
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
     headers: {
       'content-type': 'application/json',
-      host,
-      'x-amz-date': amzDate,
-      authorization,
+      authorization: `Bearer ${RESEND_API_KEY}`,
     },
-    body,
+    body: JSON.stringify({
+      from: RESEND_FROM_EMAIL,
+      to: [to],
+      subject: 'Your Magic Brush verification code',
+      text: `Your verification code is ${code}. It expires in 10 minutes.`,
+    }),
   });
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`SES send failed: ${response.status} ${text}`);
+    throw new Error(`Resend send failed: ${response.status} ${text}`);
   }
 };
 
@@ -230,6 +115,14 @@ const getAuthUser = async (c: any): Promise<AuthUser | null> => {
   return row ?? null;
 };
 
+const requireAuth = async (c: any): Promise<AuthUser | Response> => {
+  const user = await getAuthUser(c);
+  if (!user) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+  return user;
+};
+
 const isAdminEmail = (c: any, email: string): boolean => {
   const raw = c.env.ADMIN_EMAILS || '';
   if (!raw.trim()) {
@@ -242,19 +135,11 @@ const isAdminEmail = (c: any, email: string): boolean => {
   return list.includes(email.toLowerCase());
 };
 
-const requireAuth = async (c: any): Promise<AuthUser | Response> => {
-  const user = await getAuthUser(c);
-  if (!user) {
-    return c.json({ error: 'Unauthorized' }, 401);
-  }
-  return user;
-};
-
-const getPrototypeMeta = async (c: any, uuid: string) => {
+const getPageMeta = async (c: any, uuid: string) => {
   return c.env.DB.prepare(
     `SELECT p.id, p.owner_id, p.name, p.public, p.likes_count, p.version_count, p.created_at, p.updated_at,
             u.username as owner_username
-     FROM prototypes p
+     FROM pages p
      JOIN users u ON u.id = p.owner_id
      WHERE p.id = ?1`
   )
@@ -299,10 +184,11 @@ app.post('/api/auth/request-code', async (c) => {
  */
 app.post('/api/auth/verify-code', async (c) => {
   try {
-    const { email, code, username } = await c.req.json<{
+    const { email, code, username, mode } = await c.req.json<{
       email: string;
       code: string;
       username?: string;
+      mode?: 'signin' | 'signup';
     }>();
 
     if (!email || !code) {
@@ -338,6 +224,9 @@ app.post('/api/auth/verify-code', async (c) => {
       .first<AuthUser>();
 
     if (!user) {
+      if (mode === 'signin') {
+        return c.json({ error: 'Account not found. Please sign up.' }, 400);
+      }
       if (!username || username.trim().length < 2) {
         return c.json({ error: 'Username required', needsUsername: true }, 400);
       }
@@ -360,6 +249,8 @@ app.post('/api/auth/verify-code', async (c) => {
       } catch (err) {
         return c.json({ error: 'Username already taken' }, 400);
       }
+    } else if (mode === 'signup') {
+      return c.json({ error: 'Account already exists. Please sign in.' }, 400);
     }
 
     const token = randomToken(32);
@@ -411,24 +302,25 @@ app.post('/api/logout', async (c) => {
 });
 
 /**
- * POST /api/save-html
+ * POST /api/page/save
  * Save HTML content to R2 bucket (requires auth)
  */
-app.post('/api/save-html', async (c) => {
+app.post('/api/page/save', async (c) => {
   try {
     const authUser = await requireAuth(c);
     if (authUser instanceof Response) {
       return authUser;
     }
 
-    const { uuid, html, name, public: isPublic, createVersion, versionNumber } = await c.req.json<{
-      uuid: string;
-      html: string;
-      name?: string;
-      public?: boolean;
-      createVersion?: boolean;
-      versionNumber?: number;
-    }>();
+    const { uuid, html, name, public: isPublic, createVersion, versionNumber } =
+      await c.req.json<{
+        uuid: string;
+        html: string;
+        name?: string;
+        public?: boolean;
+        createVersion?: boolean;
+        versionNumber?: number;
+      }>();
 
     if (!uuid || !html) {
       return c.json({ error: 'Missing uuid or html' }, 400);
@@ -440,17 +332,17 @@ app.post('/api/save-html', async (c) => {
 
     const now = nowIso();
     const existing = await c.env.DB.prepare(
-      'SELECT owner_id FROM prototypes WHERE id = ?1'
+      'SELECT owner_id FROM pages WHERE id = ?1'
     )
       .bind(uuid)
       .first<{ owner_id: number }>();
 
     if (!existing) {
-      const finalName = (name && name.trim()) || 'Untitled Prototype';
+      const finalName = (name && name.trim()) || 'Untitled Page';
       const publicValue = isPublic === false ? 0 : 1;
       await c.env.DB.prepare(
-        `INSERT INTO prototypes (id, owner_id, name, public, likes_count, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, 0, ?5, ?6)`
+        `INSERT INTO pages (id, owner_id, name, public, likes_count, version_count, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, 0, 0, ?5, ?6)`
       )
         .bind(uuid, authUser.id, finalName, publicValue, now, now)
         .run();
@@ -459,7 +351,7 @@ app.post('/api/save-html', async (c) => {
     } else {
       if (name || typeof isPublic === 'boolean') {
         await c.env.DB.prepare(
-          `UPDATE prototypes
+          `UPDATE pages
            SET name = COALESCE(?2, name),
                public = COALESCE(?3, public),
                updated_at = ?4
@@ -473,9 +365,7 @@ app.post('/api/save-html', async (c) => {
           )
           .run();
       } else {
-        await c.env.DB.prepare(
-          'UPDATE prototypes SET updated_at = ?2 WHERE id = ?1'
-        )
+        await c.env.DB.prepare('UPDATE pages SET updated_at = ?2 WHERE id = ?1')
           .bind(uuid, now)
           .run();
       }
@@ -497,11 +387,11 @@ app.post('/api/save-html', async (c) => {
 
       await c.env.DB.batch([
         c.env.DB.prepare(
-          `INSERT OR REPLACE INTO prototype_versions (prototype_id, version, html_key, created_at)
+          `INSERT OR REPLACE INTO page_versions (page_id, version, html_key, created_at)
            VALUES (?1, ?2, ?3, ?4)`
         ).bind(uuid, versionNumber, versionKey, now),
         c.env.DB.prepare(
-          `UPDATE prototypes
+          `UPDATE pages
            SET version_count = MAX(version_count, ?2), updated_at = ?3
            WHERE id = ?1`
         ).bind(uuid, versionNumber, now),
@@ -519,10 +409,10 @@ app.post('/api/save-html', async (c) => {
 });
 
 /**
- * GET /preview/:uuid
+ * GET /pages/:uuid
  * Retrieve HTML content from R2 bucket (public or owner)
  */
-app.get('/preview/:uuid', async (c) => {
+app.get('/pages/:uuid', async (c) => {
   try {
     const uuid = c.req.param('uuid');
     const version = c.req.query('version');
@@ -531,7 +421,7 @@ app.get('/preview/:uuid', async (c) => {
       return c.text('UUID is required', 400);
     }
 
-    const meta = await getPrototypeMeta(c, uuid);
+    const meta = await getPageMeta(c, uuid);
     if (!meta) {
       return c.text('HTML not found', 404);
     }
@@ -558,10 +448,10 @@ app.get('/preview/:uuid', async (c) => {
 });
 
 /**
- * POST /api/save-history
+ * POST /api/page/history
  * Save conversation history to R2 bucket (owner only)
  */
-app.post('/api/save-history', async (c) => {
+app.post('/api/page/history', async (c) => {
   try {
     const authUser = await requireAuth(c);
     if (authUser instanceof Response) {
@@ -582,7 +472,7 @@ app.post('/api/save-history', async (c) => {
     }
 
     const meta = await c.env.DB.prepare(
-      'SELECT owner_id FROM prototypes WHERE id = ?1'
+      'SELECT owner_id FROM pages WHERE id = ?1'
     )
       .bind(uuid)
       .first<{ owner_id: number }>();
@@ -612,10 +502,10 @@ app.post('/api/save-history', async (c) => {
 });
 
 /**
- * GET /api/history/:uuid
- * Retrieve conversation history from R2 bucket (owner only)
+ * GET /api/page/history/:uuid
+ * Retrieve conversation history (public pages visible to everyone)
  */
-app.get('/api/history/:uuid', async (c) => {
+app.get('/api/page/history/:uuid', async (c) => {
   try {
     const uuid = c.req.param('uuid');
 
@@ -624,7 +514,7 @@ app.get('/api/history/:uuid', async (c) => {
     }
 
     const meta = await c.env.DB.prepare(
-      'SELECT owner_id, public FROM prototypes WHERE id = ?1'
+      'SELECT owner_id, public FROM pages WHERE id = ?1'
     )
       .bind(uuid)
       .first<{ owner_id: number; public: number }>();
@@ -658,17 +548,17 @@ app.get('/api/history/:uuid', async (c) => {
 });
 
 /**
- * GET /api/prototype/:uuid
- * Retrieve prototype metadata
+ * GET /api/page/:uuid
+ * Retrieve page metadata
  */
-app.get('/api/prototype/:uuid', async (c) => {
+app.get('/api/page/:uuid', async (c) => {
   try {
     const uuid = c.req.param('uuid');
     if (!uuid) {
       return c.json({ error: 'UUID is required' }, 400);
     }
 
-    const meta = await getPrototypeMeta(c, uuid);
+    const meta = await getPageMeta(c, uuid);
     if (!meta) {
       return c.json({ error: 'Not found' }, 404);
     }
@@ -681,11 +571,12 @@ app.get('/api/prototype/:uuid', async (c) => {
     if (meta.public !== 1 && !canEdit) {
       return c.json({ error: 'Not found' }, 404);
     }
+
     let liked = false;
 
     if (authUser) {
       const likedRow = await c.env.DB.prepare(
-        'SELECT 1 FROM likes WHERE user_id = ?1 AND prototype_id = ?2'
+        'SELECT 1 FROM page_likes WHERE user_id = ?1 AND page_id = ?2'
       )
         .bind(authUser.id, uuid)
         .first();
@@ -709,16 +600,16 @@ app.get('/api/prototype/:uuid', async (c) => {
       liked,
     });
   } catch (error) {
-    console.error('Error fetching prototype meta:', error);
-    return c.json({ error: 'Failed to fetch prototype' }, 500);
+    console.error('Error fetching page meta:', error);
+    return c.json({ error: 'Failed to fetch page' }, 500);
   }
 });
 
 /**
- * PATCH /api/prototype/:uuid
- * Update prototype metadata (owner only)
+ * PATCH /api/page/:uuid
+ * Update page metadata (owner only)
  */
-app.patch('/api/prototype/:uuid', async (c) => {
+app.patch('/api/page/:uuid', async (c) => {
   try {
     const authUser = await requireAuth(c);
     if (authUser instanceof Response) {
@@ -731,9 +622,7 @@ app.patch('/api/prototype/:uuid', async (c) => {
       public?: boolean;
     }>();
 
-    const meta = await c.env.DB.prepare(
-      'SELECT owner_id FROM prototypes WHERE id = ?1'
-    )
+    const meta = await c.env.DB.prepare('SELECT owner_id FROM pages WHERE id = ?1')
       .bind(uuid)
       .first<{ owner_id: number }>();
 
@@ -747,7 +636,7 @@ app.patch('/api/prototype/:uuid', async (c) => {
     }
 
     await c.env.DB.prepare(
-      `UPDATE prototypes
+      `UPDATE pages
        SET name = COALESCE(?2, name),
            public = COALESCE(?3, public),
            updated_at = ?4
@@ -763,16 +652,16 @@ app.patch('/api/prototype/:uuid', async (c) => {
 
     return c.json({ success: true });
   } catch (error) {
-    console.error('Error updating prototype:', error);
-    return c.json({ error: 'Failed to update prototype' }, 500);
+    console.error('Error updating page:', error);
+    return c.json({ error: 'Failed to update page' }, 500);
   }
 });
 
 /**
- * GET /api/square
- * List public prototypes
+ * GET /api/pages
+ * List public pages
  */
-app.get('/api/square', async (c) => {
+app.get('/api/pages', async (c) => {
   try {
     const sort = (c.req.query('sort') || 'latest').toLowerCase();
     const filter = (c.req.query('filter') || 'public').toLowerCase();
@@ -794,9 +683,9 @@ app.get('/api/square', async (c) => {
         `SELECT p.id, p.name, p.likes_count, p.updated_at, p.created_at,
                 u.username as owner_username,
                 CASE WHEN l.user_id IS NULL THEN 0 ELSE 1 END as liked
-         FROM prototypes p
+         FROM pages p
          JOIN users u ON u.id = p.owner_id
-         LEFT JOIN likes l ON l.prototype_id = p.id AND l.user_id = ?2
+         LEFT JOIN page_likes l ON l.page_id = p.id AND l.user_id = ?2
          WHERE p.owner_id = ?1
          ORDER BY ${orderBy}
          LIMIT ?3`
@@ -811,9 +700,9 @@ app.get('/api/square', async (c) => {
       `SELECT p.id, p.name, p.likes_count, p.updated_at, p.created_at,
               u.username as owner_username,
               CASE WHEN l.user_id IS NULL THEN 0 ELSE 1 END as liked
-       FROM prototypes p
+       FROM pages p
        JOIN users u ON u.id = p.owner_id
-       LEFT JOIN likes l ON l.prototype_id = p.id AND l.user_id = ?2
+       LEFT JOIN page_likes l ON l.page_id = p.id AND l.user_id = ?2
        WHERE p.public = 1
        ORDER BY ${orderBy}
        LIMIT ?1`
@@ -823,16 +712,16 @@ app.get('/api/square', async (c) => {
 
     return c.json({ items: results.results || [] });
   } catch (error) {
-    console.error('Error fetching square:', error);
-    return c.json({ error: 'Failed to fetch square' }, 500);
+    console.error('Error fetching pages:', error);
+    return c.json({ error: 'Failed to fetch pages' }, 500);
   }
 });
 
 /**
- * DELETE /api/prototype/:uuid
- * Admin-only deletion of prototype and related assets
+ * DELETE /api/page/:uuid
+ * Admin or owner deletion of page and related assets
  */
-app.delete('/api/prototype/:uuid', async (c) => {
+app.delete('/api/page/:uuid', async (c) => {
   try {
     const authUser = await requireAuth(c);
     if (authUser instanceof Response) {
@@ -844,9 +733,7 @@ app.delete('/api/prototype/:uuid', async (c) => {
       return c.json({ error: 'UUID is required' }, 400);
     }
 
-    const meta = await c.env.DB.prepare(
-      'SELECT id, owner_id FROM prototypes WHERE id = ?1'
-    )
+    const meta = await c.env.DB.prepare('SELECT id, owner_id FROM pages WHERE id = ?1')
       .bind(uuid)
       .first<{ id: string; owner_id: number }>();
 
@@ -862,7 +749,7 @@ app.delete('/api/prototype/:uuid', async (c) => {
     }
 
     const versions = await c.env.DB.prepare(
-      'SELECT html_key FROM prototype_versions WHERE prototype_id = ?1'
+      'SELECT html_key FROM page_versions WHERE page_id = ?1'
     )
       .bind(uuid)
       .all<{ html_key: string }>();
@@ -876,23 +763,23 @@ app.delete('/api/prototype/:uuid', async (c) => {
     await c.env.HTML_BUCKET.delete(keys);
 
     await c.env.DB.batch([
-      c.env.DB.prepare('DELETE FROM likes WHERE prototype_id = ?1').bind(uuid),
-      c.env.DB.prepare('DELETE FROM prototype_versions WHERE prototype_id = ?1').bind(uuid),
-      c.env.DB.prepare('DELETE FROM prototypes WHERE id = ?1').bind(uuid),
+      c.env.DB.prepare('DELETE FROM page_likes WHERE page_id = ?1').bind(uuid),
+      c.env.DB.prepare('DELETE FROM page_versions WHERE page_id = ?1').bind(uuid),
+      c.env.DB.prepare('DELETE FROM pages WHERE id = ?1').bind(uuid),
     ]);
 
     return c.json({ success: true });
   } catch (error) {
-    console.error('Delete prototype error:', error);
-    return c.json({ error: 'Failed to delete prototype' }, 500);
+    console.error('Delete page error:', error);
+    return c.json({ error: 'Failed to delete page' }, 500);
   }
 });
 
 /**
- * POST /api/prototype/:uuid/like
+ * POST /api/page/:uuid/like
  * Toggle like (logged-in users only)
  */
-app.post('/api/prototype/:uuid/like', async (c) => {
+app.post('/api/page/:uuid/like', async (c) => {
   try {
     const authUser = await requireAuth(c);
     if (authUser instanceof Response) {
@@ -900,9 +787,7 @@ app.post('/api/prototype/:uuid/like', async (c) => {
     }
 
     const uuid = c.req.param('uuid');
-    const meta = await c.env.DB.prepare(
-      'SELECT public FROM prototypes WHERE id = ?1'
-    )
+    const meta = await c.env.DB.prepare('SELECT public FROM pages WHERE id = ?1')
       .bind(uuid)
       .first<{ public: number }>();
 
@@ -911,7 +796,7 @@ app.post('/api/prototype/:uuid/like', async (c) => {
     }
 
     const liked = await c.env.DB.prepare(
-      'SELECT 1 FROM likes WHERE user_id = ?1 AND prototype_id = ?2'
+      'SELECT 1 FROM page_likes WHERE user_id = ?1 AND page_id = ?2'
     )
       .bind(authUser.id, uuid)
       .first();
@@ -919,14 +804,14 @@ app.post('/api/prototype/:uuid/like', async (c) => {
     if (liked) {
       await c.env.DB.batch([
         c.env.DB.prepare(
-          'DELETE FROM likes WHERE user_id = ?1 AND prototype_id = ?2'
+          'DELETE FROM page_likes WHERE user_id = ?1 AND page_id = ?2'
         ).bind(authUser.id, uuid),
         c.env.DB.prepare(
-          'UPDATE prototypes SET likes_count = MAX(likes_count - 1, 0) WHERE id = ?1'
+          'UPDATE pages SET likes_count = MAX(likes_count - 1, 0) WHERE id = ?1'
         ).bind(uuid),
       ]);
       const countRow = await c.env.DB.prepare(
-        'SELECT likes_count FROM prototypes WHERE id = ?1'
+        'SELECT likes_count FROM pages WHERE id = ?1'
       )
         .bind(uuid)
         .first<{ likes_count: number }>();
@@ -935,15 +820,15 @@ app.post('/api/prototype/:uuid/like', async (c) => {
 
     await c.env.DB.batch([
       c.env.DB.prepare(
-        'INSERT INTO likes (user_id, prototype_id, created_at) VALUES (?1, ?2, ?3)'
+        'INSERT INTO page_likes (user_id, page_id, created_at) VALUES (?1, ?2, ?3)'
       ).bind(authUser.id, uuid, nowIso()),
       c.env.DB.prepare(
-        'UPDATE prototypes SET likes_count = likes_count + 1 WHERE id = ?1'
+        'UPDATE pages SET likes_count = likes_count + 1 WHERE id = ?1'
       ).bind(uuid),
     ]);
 
     const countRow = await c.env.DB.prepare(
-      'SELECT likes_count FROM prototypes WHERE id = ?1'
+      'SELECT likes_count FROM pages WHERE id = ?1'
     )
       .bind(uuid)
       .first<{ likes_count: number }>();
@@ -955,17 +840,17 @@ app.post('/api/prototype/:uuid/like', async (c) => {
 });
 
 /**
- * GET /api/prototype/:uuid/download
+ * GET /api/page/:uuid/download
  * Download HTML (public or owner)
  */
-app.get('/api/prototype/:uuid/download', async (c) => {
+app.get('/api/page/:uuid/download', async (c) => {
   try {
     const uuid = c.req.param('uuid');
     if (!uuid) {
       return c.text('UUID is required', 400);
     }
 
-    const meta = await getPrototypeMeta(c, uuid);
+    const meta = await getPageMeta(c, uuid);
     if (!meta) {
       return c.text('Not found', 404);
     }
@@ -982,7 +867,7 @@ app.get('/api/prototype/:uuid/download', async (c) => {
       return c.text('HTML not found', 404);
     }
 
-    const filename = (meta.name || 'prototype')
+    const filename = (meta.name || 'page')
       .replace(/[^a-zA-Z0-9-_\u4e00-\u9fa5]+/g, '_')
       .slice(0, 50);
 

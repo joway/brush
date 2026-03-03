@@ -6,9 +6,6 @@ import {
   getDesignPrompt,
   getModificationPrompt,
   getNamePrompt,
-  isProductRequirement,
-  detectLanguage,
-  getRejectionMessage,
 } from './prompts';
 
 export type AIProvider = 'openai' | 'claude';
@@ -47,18 +44,12 @@ export class DesignAgent {
   }
 
   /**
-   * Generate initial product prototype
+   * Generate initial page
    */
-  async generatePrototype(
+  async generatePage(
     userDescription: string,
     options?: GenerateOptions
   ): Promise<string> {
-    // Validate input
-    if (!isProductRequirement(userDescription)) {
-      const language = detectLanguage(userDescription);
-      return getRejectionMessage(language);
-    }
-
     // Create design prompt
     const prompt = getDesignPrompt(userDescription);
 
@@ -72,9 +63,9 @@ export class DesignAgent {
   }
 
   /**
-   * Modify existing prototype based on user feedback
+   * Modify existing page based on user feedback
    */
-  async modifyPrototype(
+  async modifyPage(
     currentHtml: string,
     userFeedback: string,
     options?: GenerateOptions
@@ -89,7 +80,7 @@ export class DesignAgent {
   /**
    * Generate a short product name based on user description
    */
-  async generatePrototypeName(userDescription: string): Promise<string> {
+  async generatePageName(userDescription: string): Promise<string> {
     const prompt = getNamePrompt(userDescription);
 
     if (this.provider === 'openai') {
@@ -106,7 +97,7 @@ export class DesignAgent {
         temperature: 0.4,
       });
 
-      return (completion.choices[0]?.message?.content || 'Untitled Prototype').trim();
+      return (completion.choices[0]?.message?.content || 'Untitled Page').trim();
     }
 
     if (!this.anthropicClient) {
@@ -124,7 +115,7 @@ export class DesignAgent {
     const content = response.content.find(
       (block) => block.type === 'text'
     ) as { text?: string } | undefined;
-    return (content?.text || 'Untitled Prototype').trim();
+    return (content?.text || 'Untitled Page').trim();
   }
 
   /**

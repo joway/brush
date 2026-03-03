@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { nanoid } from 'nanoid';
 import { DesignAgent } from '../agents/DesignAgent';
 import {
-  saveHtml,
-  saveHistory,
+  savePageHtml,
+  savePageHistory,
   ConversationMessage,
   fetchMe,
 } from '../utils/api';
@@ -101,10 +101,10 @@ export default function Home() {
       // Initialize Design Agent
       const agent = new DesignAgent({ provider, apiKey });
 
-      setProgress('Generating product prototype...');
+    setProgress('Generating page...');
 
-      // Generate prototype
-      const html = await agent.generatePrototype(description, {
+      // Generate page
+      const html = await agent.generatePage(description, {
         onProgress: (chunk) => {
           // Show streaming progress
           if (chunk.includes('<!DOCTYPE') || chunk.includes('<html')) {
@@ -118,19 +118,10 @@ export default function Home() {
       });
 
       // Check if it's a rejection message
-      if (
-        html.includes('只能帮助设计产品原型') ||
-        html.includes('can only help design product prototypes')
-      ) {
-        setError(html);
-        setIsLoading(false);
-        return;
-      }
-
-      setProgress('Generating prototype name...');
-      let generatedName = 'Untitled Prototype';
+      setProgress('Generating page name...');
+      let generatedName = 'Untitled Page';
       try {
-        generatedName = await agent.generatePrototypeName(description);
+        generatedName = await agent.generatePageName(description);
       } catch {
         // fallback to default name
       }
@@ -138,7 +129,7 @@ export default function Home() {
       // Generate UUID for this design
       const uuid = nanoid(10);
 
-      setProgress('Saving prototype...');
+      setProgress('Saving page...');
 
       // Create initial conversation history
       const initialHistory: ConversationMessage[] = [
@@ -149,20 +140,20 @@ export default function Home() {
         },
         {
           role: 'assistant',
-          content: 'Generated initial product prototype based on your description.',
+          content: 'Generated initial page based on your description.',
           timestamp: new Date().toISOString(),
           version: 1,
         },
       ];
 
       // Save HTML and history to R2
-      await saveHtml(uuid, html, {
+      await savePageHtml(uuid, html, {
         name: generatedName,
         public: isPublic,
         createVersion: true,
         versionNumber: 1,
       });
-      await saveHistory(uuid, initialHistory);
+      await savePageHistory(uuid, initialHistory);
 
       setDescription('');
       saveDraftDescription('');
@@ -181,7 +172,7 @@ export default function Home() {
       setError(
         err instanceof Error
           ? err.message
-          : 'Failed to generate prototype. Please check your API key and try again.'
+          : 'Failed to generate page. Please check your API key and try again.'
       );
       setIsLoading(false);
     }
@@ -194,7 +185,7 @@ export default function Home() {
 
       <div className="mx-auto max-w-3xl px-5 py-16">
         <div className="mb-6 flex items-center justify-between text-sm text-[var(--ink-muted)]">
-          <span>Magic Brush • Prototype Studio</span>
+          <span>Magic Brush</span>
           <div className="flex items-center gap-4">
             <button
               onClick={() => navigate('/square')}
@@ -236,15 +227,11 @@ export default function Home() {
         </div>
 
         <div className="mb-10 text-center">
-          <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-white px-3 py-1 text-xs text-[var(--ink-muted)] shadow-sm">
-            <span className="h-2 w-2 rounded-full bg-black/60"></span>
-            Minimal AI Prototyping
-          </div>
           <h1 className="mt-5 text-5xl font-semibold tracking-tight font-['Fraunces']">
             Magic Brush
           </h1>
           <p className="mt-4 text-lg text-[var(--ink-muted)]">
-            Describe your product in a few lines. Get a clean, interactive prototype in seconds.
+            Describe your idea in a few lines. Get a clean, interactive page in seconds.
           </p>
         </div>
 

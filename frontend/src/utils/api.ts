@@ -13,7 +13,7 @@ const authHeaders = (): Record<string, string> => {
 /**
  * Save HTML to R2 storage via Workers API
  */
-export async function saveHtml(
+export async function savePageHtml(
   uuid: string,
   html: string,
   metadata?: {
@@ -23,7 +23,7 @@ export async function saveHtml(
     versionNumber?: number;
   }
 ): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/save-html`, {
+  const response = await fetch(`${API_BASE_URL}/api/page/save`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -40,9 +40,9 @@ export async function saveHtml(
 /**
  * Fetch HTML from R2 storage via Workers API
  */
-export async function fetchHtml(uuid: string, version?: number): Promise<string> {
+export async function fetchPageHtml(uuid: string, version?: number): Promise<string> {
   const suffix = version ? `?version=${version}` : '';
-  const response = await fetch(`${API_BASE_URL}/preview/${uuid}${suffix}`, {
+  const response = await fetch(`${API_BASE_URL}/pages/${uuid}${suffix}`, {
     headers: {
       ...authHeaders(),
     },
@@ -53,6 +53,10 @@ export async function fetchHtml(uuid: string, version?: number): Promise<string>
   }
 
   return response.text();
+}
+
+export function getPageEmbedUrl(uuid: string): string {
+  return `${API_BASE_URL}/pages/${uuid}`;
 }
 
 /**
@@ -68,11 +72,11 @@ export interface ConversationMessage {
 /**
  * Save conversation history to R2 storage via Workers API
  */
-export async function saveHistory(
+export async function savePageHistory(
   uuid: string,
   history: ConversationMessage[]
 ): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/save-history`, {
+  const response = await fetch(`${API_BASE_URL}/api/page/history`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -89,10 +93,10 @@ export async function saveHistory(
 /**
  * Fetch conversation history from R2 storage via Workers API
  */
-export async function fetchHistory(
+export async function fetchPageHistory(
   uuid: string
 ): Promise<ConversationMessage[]> {
-  const response = await fetch(`${API_BASE_URL}/api/history/${uuid}`, {
+  const response = await fetch(`${API_BASE_URL}/api/page/history/${uuid}`, {
     headers: {
       ...authHeaders(),
     },
@@ -121,12 +125,13 @@ export async function requestEmailCode(email: string): Promise<void> {
 export async function verifyEmailCode(
   email: string,
   code: string,
-  username?: string
+  username?: string,
+  mode?: 'signin' | 'signup'
 ): Promise<{ token: string; user: StoredUser }> {
   const response = await fetch(`${API_BASE_URL}/api/auth/verify-code`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, code, username }),
+    body: JSON.stringify({ email, code, username, mode }),
   });
 
   const data = await response.json().catch(() => ({}));
@@ -171,12 +176,12 @@ export interface SquareItem {
   liked?: boolean;
 }
 
-export async function fetchSquare(
+export async function fetchPages(
   sort: 'latest' | 'top' = 'latest',
   filter: 'public' | 'mine' = 'public'
 ): Promise<SquareItem[]> {
   const response = await fetch(
-    `${API_BASE_URL}/api/square?sort=${sort}&filter=${filter}`,
+    `${API_BASE_URL}/api/pages?sort=${sort}&filter=${filter}`,
     {
     headers: {
       ...authHeaders(),
@@ -190,7 +195,7 @@ export async function fetchSquare(
   return (data.items || []) as SquareItem[];
 }
 
-export interface PrototypeMeta {
+export interface PageMeta {
   id: string;
   name: string;
   public: boolean;
@@ -204,24 +209,24 @@ export interface PrototypeMeta {
   liked: boolean;
 }
 
-export async function fetchPrototypeMeta(uuid: string): Promise<PrototypeMeta> {
-  const response = await fetch(`${API_BASE_URL}/api/prototype/${uuid}`, {
+export async function fetchPageMeta(uuid: string): Promise<PageMeta> {
+  const response = await fetch(`${API_BASE_URL}/api/page/${uuid}`, {
     headers: {
       ...authHeaders(),
     },
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data.error || 'Failed to fetch prototype');
+    throw new Error(data.error || 'Failed to fetch page');
   }
-  return data as PrototypeMeta;
+  return data as PageMeta;
 }
 
-export async function updatePrototypeMeta(
+export async function updatePageMeta(
   uuid: string,
   payload: { name?: string; public?: boolean }
 ): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/prototype/${uuid}`, {
+  const response = await fetch(`${API_BASE_URL}/api/page/${uuid}`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
@@ -231,12 +236,12 @@ export async function updatePrototypeMeta(
   });
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
-    throw new Error(data.error || 'Failed to update prototype');
+    throw new Error(data.error || 'Failed to update page');
   }
 }
 
-export async function deletePrototype(uuid: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/prototype/${uuid}`, {
+export async function deletePage(uuid: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/page/${uuid}`, {
     method: 'DELETE',
     headers: {
       ...authHeaders(),
@@ -244,14 +249,14 @@ export async function deletePrototype(uuid: string): Promise<void> {
   });
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
-    throw new Error(data.error || 'Failed to delete prototype');
+    throw new Error(data.error || 'Failed to delete page');
   }
 }
 
-export async function toggleLike(
+export async function togglePageLike(
   uuid: string
 ): Promise<{ liked: boolean; likesCount: number }> {
-  const response = await fetch(`${API_BASE_URL}/api/prototype/${uuid}/like`, {
+  const response = await fetch(`${API_BASE_URL}/api/page/${uuid}/like`, {
     method: 'POST',
     headers: {
       ...authHeaders(),
@@ -264,8 +269,8 @@ export async function toggleLike(
   return data as { liked: boolean; likesCount: number };
 }
 
-export async function downloadPrototypeHtml(uuid: string): Promise<Blob> {
-  const response = await fetch(`${API_BASE_URL}/api/prototype/${uuid}/download`, {
+export async function downloadPageHtml(uuid: string): Promise<Blob> {
+  const response = await fetch(`${API_BASE_URL}/api/page/${uuid}/download`, {
     headers: {
       ...authHeaders(),
     },

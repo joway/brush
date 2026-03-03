@@ -4,11 +4,9 @@ compatibility_date = "2023-12-18"
 
 # Runtime config (set secrets via `wrangler secret put`)
 [vars]
-AWS_REGION = "ap-southeast-1"
-SES_FROM_NAME = "Magic Brush"
-SES_FROM_EMAIL = "i@elsetech.app"
 EMAIL_CODE_SECRET = "Y4U7mM2ABgjAcya4wgzFLx7asPAQGm"
 ADMIN_EMAILS = "joway.w@gmail.com"
+RESEND_FROM_EMAIL = "brush@mail.elsetech.app"
 
 # R2 bucket binding
 [[r2_buckets]]

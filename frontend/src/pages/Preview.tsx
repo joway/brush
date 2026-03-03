@@ -2,16 +2,17 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { DesignAgent } from '../agents/DesignAgent';
 import {
-  fetchHtml,
-  saveHtml,
-  fetchHistory,
-  saveHistory,
+  fetchPageHtml,
+  savePageHtml,
+  fetchPageHistory,
+  savePageHistory,
   ConversationMessage,
-  fetchPrototypeMeta,
-  updatePrototypeMeta,
-  toggleLike,
-  downloadPrototypeHtml,
-  deletePrototype,
+  fetchPageMeta,
+  updatePageMeta,
+  togglePageLike,
+  downloadPageHtml,
+  deletePage,
+  getPageEmbedUrl,
 } from '../utils/api';
 import { loadConfig, getStoredUser } from '../utils/storage';
 import ChatMessage from '../components/ChatMessage';
@@ -29,7 +30,7 @@ export default function Preview() {
   const [conversationHistory, setConversationHistory] = useState<
     ConversationMessage[]
   >([]);
-  const [prototypeName, setPrototypeName] = useState('');
+  const [pageName, setPageName] = useState('');
   const [nameDraft, setNameDraft] = useState('');
   const [isPublic, setIsPublic] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
@@ -40,6 +41,8 @@ export default function Preview() {
   const [canDelete, setCanDelete] = useState(false);
   const [isSavingMeta, setIsSavingMeta] = useState(false);
   const [metaError, setMetaError] = useState('');
+  const [showEmbedModal, setShowEmbedModal] = useState(false);
+  const [embedCode, setEmbedCode] = useState('');
 
   const currentUser = getStoredUser();
 
@@ -70,8 +73,8 @@ export default function Preview() {
       setIsLoading(true);
       setMetaError('');
 
-      const meta = await fetchPrototypeMeta(uuid);
-      setPrototypeName(meta.name);
+      const meta = await fetchPageMeta(uuid);
+      setPageName(meta.name);
       setNameDraft(meta.name);
       setIsPublic(meta.public);
       setLikesCount(meta.likesCount);
@@ -81,11 +84,11 @@ export default function Preview() {
       setOwnerName(meta.owner.username);
       setVersionCount(meta.versionCount || 0);
 
-      const content = await fetchHtml(uuid);
+      const content = await fetchPageHtml(uuid);
       setHtml(content);
 
       if (meta.public || meta.canEdit) {
-        const history = await fetchHistory(uuid);
+        const history = await fetchPageHistory(uuid);
         setConversationHistory(history);
       } else {
         setConversationHistory([]);
@@ -94,7 +97,7 @@ export default function Preview() {
       setError('');
     } catch (err) {
       console.error('Failed to load HTML:', err);
-      setError('Failed to load prototype. It may not exist.');
+      setError('Failed to load page. It may not exist.');
     } finally {
       setIsLoading(false);
     }
@@ -106,7 +109,7 @@ export default function Preview() {
     }
 
     if (!canEdit) {
-      setError('Only the owner can edit this prototype.');
+      setError('Only the owner can edit this page.');
       return;
     }
 
@@ -143,10 +146,10 @@ export default function Preview() {
         });
       }
 
-      setModifyProgress('Modifying prototype...');
+      setModifyProgress('Modifying page...');
 
-      // Modify the prototype
-      const updatedHtml = await agentRef.current.modifyPrototype(
+      // Modify the page
+      const updatedHtml = await agentRef.current.modifyPage(
         html,
         userMessage,
         {
@@ -169,7 +172,7 @@ export default function Preview() {
       // Add assistant response to history
       const assistantMessage: ConversationMessage = {
         role: 'assistant',
-        content: 'Updated the prototype based on your feedback.',
+        content: 'Updated the page based on your feedback.',
         timestamp: new Date().toISOString(),
         version: newVersion,
       };
@@ -180,11 +183,11 @@ export default function Preview() {
       // Save updated HTML and history
       if (uuid) {
         await Promise.all([
-          saveHtml(uuid, updatedHtml, {
+          savePageHtml(uuid, updatedHtml, {
             createVersion: true,
             versionNumber: newVersion,
           }),
-          saveHistory(uuid, updatedHistory),
+          savePageHistory(uuid, updatedHistory),
         ]);
       }
 
@@ -207,7 +210,7 @@ export default function Preview() {
     } catch (err) {
       console.error('Modify error:', err);
       setError(
-        err instanceof Error ? err.message : 'Failed to modify prototype'
+        err instanceof Error ? err.message : 'Failed to modify page'
       );
       setIsModifying(false);
       setModifyProgress('');
@@ -221,8 +224,8 @@ export default function Preview() {
     setIsSavingMeta(true);
     setMetaError('');
     try {
-      await updatePrototypeMeta(uuid, { name: nameDraft, public: isPublic });
-      setPrototypeName(nameDraft.trim() || prototypeName);
+      await updatePageMeta(uuid, { name: nameDraft, public: isPublic });
+      setPageName(nameDraft.trim() || pageName);
     } catch (err) {
       setMetaError(err instanceof Error ? err.message : 'Update failed');
     } finally {
@@ -239,7 +242,7 @@ export default function Preview() {
       return;
     }
     try {
-      const result = await toggleLike(uuid);
+      const result = await togglePageLike(uuid);
       setLiked(result.liked);
       setLikesCount(result.likesCount);
     } catch (err) {
@@ -252,11 +255,11 @@ export default function Preview() {
       return;
     }
     try {
-      const blob = await downloadPrototypeHtml(uuid);
+      const blob = await downloadPageHtml(uuid);
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = `${(nameDraft || prototypeName || 'prototype').replace(/[^a-zA-Z0-9-_\\u4e00-\\u9fa5]+/g, '_')}.html`;
+      anchor.download = `${(nameDraft || pageName || 'page').replace(/[^a-zA-Z0-9-_\\u4e00-\\u9fa5]+/g, '_')}.html`;
       anchor.click();
       URL.revokeObjectURL(url);
     } catch (err) {
@@ -264,18 +267,42 @@ export default function Preview() {
     }
   };
 
+  const handleCopyEmbed = async () => {
+    if (!uuid) {
+      return;
+    }
+    const src = getPageEmbedUrl(uuid);
+    const code = `<iframe src=\"${src}\" style=\"width:100%;height:600px;border:0;\" loading=\"lazy\"></iframe>`;
+    try {
+      await navigator.clipboard.writeText(code);
+      setMetaError('Embed code copied.');
+    } catch {
+      setMetaError('Failed to copy embed code.');
+    }
+  };
+
+  const handleOpenEmbed = () => {
+    if (!uuid) {
+      return;
+    }
+    const src = getPageEmbedUrl(uuid);
+    const code = `<iframe src=\"${src}\" style=\"width:100%;height:600px;border:0;\" loading=\"lazy\"></iframe>`;
+    setEmbedCode(code);
+    setShowEmbedModal(true);
+  };
+
   const handleDelete = async () => {
     if (!uuid || !canDelete) {
       return;
     }
     const confirmed = window.confirm(
-      'Delete this prototype and all its history? This cannot be undone.'
+      'Delete this page and all its history? This cannot be undone.'
     );
     if (!confirmed) {
       return;
     }
     try {
-      await deletePrototype(uuid);
+      await deletePage(uuid);
       navigate('/square');
     } catch (err) {
       setMetaError(err instanceof Error ? err.message : 'Delete failed');
@@ -287,7 +314,7 @@ export default function Preview() {
       return;
     }
     try {
-      const content = await fetchHtml(uuid, version);
+      const content = await fetchPageHtml(uuid, version);
       setHtml(content);
       if (iframeRef.current) {
         iframeRef.current.srcdoc = content;
@@ -309,7 +336,7 @@ export default function Preview() {
       <div className="min-h-screen bg-[var(--paper)] flex items-center justify-center">
         <div className="text-[var(--ink)] text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black/70 mx-auto mb-4"></div>
-          <p>Loading prototype...</p>
+          <p>Loading page...</p>
         </div>
       </div>
     );
@@ -401,6 +428,12 @@ export default function Preview() {
               >
                 Download HTML
               </button>
+              <button
+                onClick={handleOpenEmbed}
+                className="rounded-xl border border-[var(--border)] bg-white px-3 py-2 text-xs text-[var(--ink)] hover:bg-[var(--paper-2)]"
+              >
+                Embed
+              </button>
               {canDelete && (
                 <button
                   onClick={handleDelete}
@@ -429,7 +462,7 @@ export default function Preview() {
             ref={iframeRef}
             srcDoc={html}
             className="w-full h-full border-0"
-            title="Product Prototype"
+            title="Page Preview"
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
           />
         </div>
@@ -465,7 +498,7 @@ export default function Preview() {
           )}
           {!canEdit && (
             <div className="mb-4 p-3 bg-[var(--paper-2)] border border-[var(--border)] rounded-xl text-[var(--ink)] text-sm">
-              Only the owner can edit this prototype.
+              Only the owner can edit this page.
             </div>
           )}
 
@@ -520,6 +553,44 @@ export default function Preview() {
         </div>
       </div>
     </div>
+    {showEmbedModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+        <div className="w-full max-w-xl rounded-2xl border border-[var(--border)] bg-white p-6 shadow-[var(--shadow)]">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold">Embed this page</h3>
+            <button
+              onClick={() => setShowEmbedModal(false)}
+              className="text-sm text-[var(--ink-muted)] hover:text-[var(--ink)]"
+            >
+              Close
+            </button>
+          </div>
+          <p className="text-sm text-[var(--ink-muted)] mb-3">
+            Copy the iframe code below and paste it into your blog.
+          </p>
+          <textarea
+            value={embedCode}
+            readOnly
+            rows={4}
+            className="w-full rounded-xl border border-[var(--border)] bg-[var(--paper-2)] px-3 py-2 text-xs text-[var(--ink)] focus:outline-none"
+          />
+          <div className="mt-4 flex items-center justify-end gap-2">
+            <button
+              onClick={() => setShowEmbedModal(false)}
+              className="rounded-xl border border-[var(--border)] bg-white px-4 py-2 text-sm hover:bg-[var(--paper-2)]"
+            >
+              Close
+            </button>
+            <button
+              onClick={handleCopyEmbed}
+              className="rounded-xl bg-black/90 hover:bg-black text-white px-4 py-2 text-sm"
+            >
+              Copy
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     </div>
   );
 }

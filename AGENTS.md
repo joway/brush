@@ -1,13 +1,13 @@
 # AI Agents Design
 
-This document describes the AI agents used in Magic Brush and their prompt engineering.
+This document describes the AI agents used in Magic Brush and their prompt engineering for page creation.
 
 ## Overview
 
-Magic Brush uses AI agents to transform product descriptions into interactive HTML prototypes. The agents are designed to:
+Magic Brush uses AI agents to transform user descriptions into interactive HTML pages. The agents are designed to:
 
-1. Understand product requirements in natural language
-2. Generate complete, self-contained HTML prototypes
+1. Understand page requirements in natural language
+2. Generate complete, self-contained HTML pages
 3. Support iterative modifications through conversation
 4. Maintain language consistency with user input
 
@@ -19,11 +19,11 @@ Magic Brush uses AI agents to transform product descriptions into interactive HT
 
 **Location**: `frontend/src/agents/DesignAgent.ts`
 
-**Purpose**: Core agent responsible for generating and modifying product prototypes
+**Purpose**: Core agent responsible for generating and modifying pages
 
 **Capabilities**:
-- Generate initial HTML prototypes from product descriptions
-- Modify existing prototypes based on user feedback
+- Generate initial HTML pages from user descriptions
+- Modify existing pages based on user feedback
 - Support both OpenAI (GPT-4) and Claude (Sonnet 3.5)
 - Streaming responses for real-time progress feedback
 - Conversation history management
@@ -37,9 +37,9 @@ Magic Brush uses AI agents to transform product descriptions into interactive HT
 ### Core Directive
 
 ```
-You are an expert Product Design AI that creates interactive product prototypes.
+You are an expert Page Design AI that creates clean, beautiful, and smooth interactive pages.
 
-Your task is to generate a complete, self-contained HTML prototype based on user requirements.
+Your task is to generate a complete, self-contained HTML page based on user requirements.
 ```
 
 ### Critical Rules
@@ -56,27 +56,7 @@ Detect the user's input language and use the SAME language in ALL text content i
 - All UI text matches user's language
 - Maintains consistency across iterations
 
-**Example**:
-- User input (Chinese): "一个待办事项应用" → HTML UI in Chinese
-- User input (English): "A todo list app" → HTML UI in English
-
-#### 2. Input Validation
-
-**Rule**:
-```
-If the user input is NOT a product requirement, respond with rejection message in user's language.
-```
-
-**Rejection Messages**:
-- English: "I can only help design product prototypes. Please describe a product you want to build."
-- Chinese: "我只能帮助设计产品原型。请描述你想要构建的产品。"
-
-**Validation Logic**:
-- Check for product/design keywords
-- Reject casual chat or unrelated questions
-- Provide clear guidance for valid input
-
-#### 3. Output Format
+#### 2. Output Format
 
 **Requirements**:
 ```
@@ -93,7 +73,7 @@ Generate a COMPLETE, SINGLE HTML file with:
 - Self-contained (no external files)
 - Works offline
 
-#### 4. Data & Interactivity Requirements
+#### 3. Data & Interactivity Requirements
 
 **Rule**:
 ```
@@ -106,13 +86,13 @@ Do NOT use external images; use simple CSS shapes/gradients/placeholders instead
 - Make interactions functional (e.g., list → detail view)
 - Avoid external images; illustrate visuals with CSS
 
-#### 5. Design Quality Standards
+#### 4. Design Quality Standards
 
 **Visual Design**:
-- Modern, clean, professional UI
+- Clean, elegant, and visually pleasing UI
 - Responsive design (mobile-friendly)
-- Good color schemes and typography
-- Smooth animations and transitions
+- Strong information hierarchy, spacing, and typography
+- Smooth, purposeful interactions and transitions
 - Accessible (semantic HTML, ARIA labels)
 
 **Technical Standards**:
@@ -134,7 +114,7 @@ Do NOT use external images; use simple CSS shapes/gradients/placeholders instead
 User Product Description:
 ${userDescription}
 
-Please analyze this product requirement and generate a complete HTML prototype.
+Please analyze this product requirement and generate a complete HTML page.
 
 Think through:
 1. What is the core functionality of this product?
@@ -143,7 +123,7 @@ Think through:
 4. What UI components are needed?
 5. What's the information hierarchy?
 
-Then generate a single, complete HTML file that demonstrates this product prototype.
+Then generate a single, complete HTML file that demonstrates this page.
 
 CRITICAL:
 - Use the same language as the user's description for all UI text in the HTML.
@@ -153,7 +133,7 @@ CRITICAL:
 ```
 
 **Purpose**:
-- Guides initial prototype generation
+- Guides initial page generation
 - Encourages thoughtful analysis
 - Ensures language consistency
 
@@ -163,13 +143,13 @@ CRITICAL:
 
 **Template**:
 ```typescript
-Current HTML prototype:
+Current HTML page:
 ${currentHtml}
 
 User Feedback:
 ${userFeedback}
 
-Please modify the HTML prototype based on the user's feedback.
+Please modify the HTML page based on the user's feedback.
 
 1. Understand what changes the user wants
 2. Update the HTML accordingly
@@ -200,21 +180,13 @@ CRITICAL:
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ 1. User Input                                               │
-│    - Product description                                    │
+│    - Page description                                       │
 │    - Natural language (any language)                        │
 └────────────┬────────────────────────────────────────────────┘
              │
              ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ 2. Validation                                               │
-│    - Check if input is product requirement                  │
-│    - Detect language                                        │
-│    - Reject if not valid                                    │
-└────────────┬────────────────────────────────────────────────┘
-             │
-             ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 3. Agent Processing                                         │
+│ 2. Agent Processing                                         │
 │    - Send to LLM with system prompt                         │
 │    - Stream response                                        │
 │    - Parse HTML output                                      │
@@ -222,7 +194,7 @@ CRITICAL:
              │
              ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ 4. Output Processing                                        │
+│ 3. Output Processing                                        │
 │    - Extract HTML from response                             │
 │    - Remove markdown blocks if present                      │
 │    - Save to storage                                        │
@@ -230,7 +202,7 @@ CRITICAL:
              │
              ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ 5. Render                                                   │
+│ 4. Render                                                   │
 │    - Display in iframe                                      │
 │    - Save conversation history                              │
 └─────────────────────────────────────────────────────────────┘
@@ -273,7 +245,7 @@ CRITICAL:
 ┌─────────────────────────────────────────────────────────────┐
 │ 5. Refresh Display                                          │
 │    - Reload iframe                                          │
-│    - Show updated prototype                                 │
+│    - Show updated page                                      │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -319,39 +291,6 @@ return 'unknown';
 
 ---
 
-## Validation Logic
-
-### Product Requirement Detection
-
-**File**: `frontend/src/agents/prompts.ts`
-
-**Function**: `isProductRequirement(text: string)`
-
-**Keywords** (multilingual):
-
-**English**:
-- app, website, product, build, create, design, develop
-- platform, system, tool, interface, page, feature, user
-- dashboard, form, login, signup, profile, search, list
-- button, menu, navigation, home, landing
-
-**Chinese**:
-- 产品, 应用, 网站, 页面, 系统, 平台, 工具
-- 设计, 开发, 构建, 创建, 功能, 用户, 界面
-- 登录, 注册, 搜索, 列表, 按钮, 菜单, 导航
-- 首页, 仪表板, 表单
-
-**Algorithm**:
-```typescript
-const keywords = [ /* ... */ ];
-const lowerText = text.toLowerCase();
-return keywords.some(keyword =>
-  lowerText.includes(keyword.toLowerCase())
-);
-```
-
----
-
 ## Model Support
 
 ### OpenAI Integration
@@ -371,11 +310,6 @@ return keywords.some(keyword =>
 }
 ```
 
-**Features**:
-- Streaming support
-- Large context window
-- High-quality code generation
-
 ### Claude Integration
 
 **Model**: Claude 3.5 Sonnet (`claude-3-5-sonnet-20241022`)
@@ -391,11 +325,6 @@ return keywords.some(keyword =>
 }
 ```
 
-**Features**:
-- Streaming support
-- Excellent design understanding
-- Strong multilingual support
-
 ---
 
 ## Conversation Management
@@ -408,6 +337,7 @@ interface ConversationMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: string; // ISO 8601
+  version?: number;  // Page version number
 }
 ```
 
@@ -427,18 +357,9 @@ interface ConversationMessage {
   },
   {
     "role": "assistant",
-    "content": "Generated initial product prototype based on your description.",
-    "timestamp": "2026-03-01T12:00:05.000Z"
-  },
-  {
-    "role": "user",
-    "content": "添加播放列表功能",
-    "timestamp": "2026-03-01T12:05:00.000Z"
-  },
-  {
-    "role": "assistant",
-    "content": "Updated the prototype based on your feedback.",
-    "timestamp": "2026-03-01T12:05:10.000Z"
+    "content": "Generated initial page based on your description.",
+    "timestamp": "2026-03-01T12:00:05.000Z",
+    "version": 1
   }
 ]
 ```
@@ -466,39 +387,9 @@ interface ConversationMessage {
 2. Remove markdown code blocks
 3. Extract HTML content
 
-**Implementation**:
-```typescript
-let html = response.trim();
-
-// Remove ```html and ``` if present
-if (html.startsWith('```html')) {
-  html = html.replace(/^```html\n?/, '');
-} else if (html.startsWith('```')) {
-  html = html.replace(/^```\n?/, '');
-}
-
-if (html.endsWith('```')) {
-  html = html.replace(/\n?```$/, '');
-}
-
-return html.trim();
-```
-
 ---
 
 ## Error Handling
-
-### Validation Errors
-
-**Scenario**: Non-product input
-
-**Response**: Localized rejection message
-
-**Example**:
-```
-User: "Hello"
-Agent: "I can only help design product prototypes. Please describe a product you want to build."
-```
 
 ### API Errors
 
@@ -513,188 +404,8 @@ Agent: "I can only help design product prototypes. Please describe a product you
 - Preserve user input
 - Suggest retry
 
-### HTML Generation Errors
-
-**Scenarios**:
-- Incomplete HTML
-- Malformed structure
-- Missing required tags
-
-**Handling**:
-- Retry generation
-- Log error details
-- Provide feedback to user
-
 ---
 
-## Best Practices
+## Last Updated
 
-### Prompt Engineering
-
-1. **Be Specific**: Clear requirements in system prompt
-2. **Provide Examples**: Show expected output format
-3. **Set Constraints**: Define what NOT to do
-4. **Use Structured Thinking**: Guide AI reasoning process
-5. **Enforce Consistency**: Repeat critical rules
-
-### Agent Design
-
-1. **Stateless Operations**: Each request is independent
-2. **Context Management**: Include relevant history
-3. **Progressive Enhancement**: Start simple, add complexity
-4. **Graceful Degradation**: Handle partial failures
-5. **User Feedback**: Show progress and status
-
-### Code Quality
-
-1. **English Comments**: All code comments in English
-2. **Clean Output**: No debugging logs in production
-3. **Semantic HTML**: Proper HTML5 structure
-4. **Modern CSS**: Use Tailwind or modern CSS
-5. **Vanilla JS**: Avoid heavy frameworks
-
----
-
-## Future Improvements
-
-### Potential Enhancements
-
-1. **Multi-turn Refinement**
-   - Ask clarifying questions
-   - Suggest alternatives
-   - Provide design options
-
-2. **Component Library**
-   - Reusable UI patterns
-   - Consistent design system
-   - Faster generation
-
-3. **Design Templates**
-   - Pre-built layouts
-   - Industry-specific templates
-   - Style presets
-
-4. **Advanced Validation**
-   - Accessibility checks
-   - Performance analysis
-   - Browser compatibility
-
-5. **Export Options**
-   - Download as ZIP
-   - Export to Figma
-   - Generate React components
-
-### Model Improvements
-
-1. **Fine-tuning**
-   - Train on design patterns
-   - Improve HTML quality
-   - Better language support
-
-2. **Multimodal Input**
-   - Sketch recognition
-   - Screenshot analysis
-   - Design mockup understanding
-
-3. **Specialized Models**
-   - UI-specific models
-   - Design-focused training
-   - Domain expertise
-
----
-
-## Performance Metrics
-
-### Response Time
-
-**Target**:
-- Initial generation: < 30 seconds
-- Modifications: < 20 seconds
-- Streaming: Real-time feedback
-
-### Quality Metrics
-
-**HTML Quality**:
-- Valid HTML5
-- Responsive design
-- Cross-browser compatible
-- Accessible
-
-**Design Quality**:
-- Professional appearance
-- Consistent styling
-- Proper spacing
-- Good typography
-
-### User Experience
-
-**Success Rate**:
-- Valid product requirements: > 95%
-- Successful generations: > 90%
-- Language consistency: 100%
-
----
-
-## Testing
-
-### Unit Tests
-
-**Validation**:
-```typescript
-test('detects product requirements', () => {
-  expect(isProductRequirement('build a todo app')).toBe(true);
-  expect(isProductRequirement('hello')).toBe(false);
-});
-
-test('detects language', () => {
-  expect(detectLanguage('一个应用')).toBe('zh');
-  expect(detectLanguage('an app')).toBe('en');
-});
-```
-
-### Integration Tests
-
-**Agent Behavior**:
-- Generate with valid input
-- Reject invalid input
-- Maintain language consistency
-- Handle streaming responses
-
-### E2E Tests
-
-**Full Workflow**:
-1. User enters description
-2. Agent generates HTML
-3. HTML displays correctly
-4. User modifies design
-5. Agent updates HTML
-6. History persists
-
----
-
-## References
-
-### Documentation
-
-- [OpenAI API Reference](https://platform.openai.com/docs/api-reference)
-- [Anthropic API Reference](https://docs.anthropic.com/claude/reference)
-- [Prompt Engineering Guide](https://www.promptingguide.ai/)
-
-### Related Files
-
-- `frontend/src/agents/DesignAgent.ts` - Agent implementation
-- `frontend/src/agents/prompts.ts` - Prompt templates
-- `frontend/src/utils/api.ts` - API utilities
-- `workers/src/index.ts` - Backend API
-
----
-
-## License
-
-MIT License - See LICENSE file for details
-
----
-
-**Last Updated**: 2026-03-01
-
-**Maintained By**: Magic Brush Team
+2026-03-03

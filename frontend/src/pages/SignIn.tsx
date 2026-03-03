@@ -35,7 +35,12 @@ export default function SignIn() {
     setIsLoading(true);
     setStatus('Verifying...');
     try {
-      const result = await verifyEmailCode(email.trim(), code.trim());
+      const result = await verifyEmailCode(
+        email.trim(),
+        code.trim(),
+        undefined,
+        'signin'
+      );
       saveAuth(result.token, result.user);
       setStatus('Signed in.');
       navigate('/');
