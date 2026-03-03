@@ -295,12 +295,12 @@ return 'unknown';
 
 ### OpenAI Integration
 
-**Model**: GPT-4 Turbo (`gpt-4-turbo-preview`)
+**Model**: GPT-5.2 (`gpt-5.2`)
 
 **Configuration**:
 ```typescript
 {
-  model: 'gpt-4-turbo-preview',
+  model: 'gpt-5.2',
   messages: [
     { role: 'system', content: SYSTEM_PROMPT },
     ...conversationHistory
@@ -312,12 +312,12 @@ return 'unknown';
 
 ### Claude Integration
 
-**Model**: Claude 3.5 Sonnet (`claude-3-5-sonnet-20241022`)
+**Model**: Claude Opus 4.6 (`claude-opus-4-6`)
 
 **Configuration**:
 ```typescript
 {
-  model: 'claude-3-5-sonnet-20241022',
+  model: 'claude-opus-4-6',
   max_tokens: 4096,
   system: SYSTEM_PROMPT,
   messages: conversationHistory,
