@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { requestEmailCode, verifyEmailCode } from '../utils/api';
 import { saveAuth } from '../utils/storage';
@@ -9,10 +9,14 @@ export default function SignIn() {
   const [code, setCode] = useState('');
   const [status, setStatus] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
 
   const handleSendCode = async () => {
     if (!email.trim()) {
       setStatus('Please enter your email.');
+      return;
+    }
+    if (cooldown > 0) {
       return;
     }
     setIsLoading(true);
@@ -20,12 +24,27 @@ export default function SignIn() {
     try {
       await requestEmailCode(email.trim());
       setStatus('Verification code sent. Check your inbox.');
+      setCooldown(60);
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : 'Failed to send code');
+      const message = err instanceof Error ? err.message : 'Failed to send code';
+      setStatus(message);
+      if (message.toLowerCase().includes('wait 60')) {
+        setCooldown(60);
+      }
     } finally {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (cooldown <= 0) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setCooldown((prev) => Math.max(prev - 1, 0));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [cooldown]);
 
   const handleVerify = async () => {
     if (!email.trim() || !code.trim()) {
@@ -99,10 +118,10 @@ export default function SignIn() {
               />
               <button
                 onClick={handleSendCode}
-                disabled={isLoading}
+                disabled={isLoading || cooldown > 0}
                 className="px-4 rounded-xl bg-black/90 hover:bg-black text-white text-sm disabled:bg-black/20 disabled:text-black/40"
               >
-                Send code
+                {cooldown > 0 ? `Resend in ${cooldown}s` : 'Send code'}
               </button>
             </div>
             <button

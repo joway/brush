@@ -89,7 +89,7 @@ export class DesignAgent {
       }
 
       const completion = await this.openaiClient.chat.completions.create({
-        model: 'gpt-4-turbo-preview',
+        model: 'gpt-5.2',
         messages: [
           { role: 'system', content: NAME_SYSTEM_PROMPT },
           { role: 'user', content: prompt },
@@ -105,7 +105,7 @@ export class DesignAgent {
     }
 
     const response = await this.anthropicClient.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-opus-4-6',
       max_tokens: 50,
       system: NAME_SYSTEM_PROMPT,
       messages: [{ role: 'user', content: prompt }],

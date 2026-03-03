@@ -157,6 +157,21 @@ app.post('/api/auth/request-code', async (c) => {
       return c.json({ error: 'Invalid email' }, 400);
     }
 
+    const latest = await c.env.DB.prepare(
+      `SELECT created_at FROM email_codes
+       WHERE email = ?1
+       ORDER BY id DESC LIMIT 1`
+    )
+      .bind(email)
+      .first<{ created_at: string }>();
+
+    if (latest?.created_at) {
+      const lastTime = Date.parse(latest.created_at);
+      if (!Number.isNaN(lastTime) && Date.now() - lastTime < 60_000) {
+        return c.json({ error: 'Please wait 60 seconds before requesting another code.' }, 429);
+      }
+    }
+
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const codeHash = await sha256Hex(
       `${code}:${email}:${c.env.EMAIL_CODE_SECRET}`
