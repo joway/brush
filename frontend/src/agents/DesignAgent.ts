@@ -10,7 +10,7 @@ import {
   getNamePrompt,
 } from './prompts';
 
-const OPENAI_MODEL = 'gpt-5-mini-2025-08-07';
+const OPENAI_MODEL = 'gpt-5.2-2025-12-11';
 const CLAUDE_MODEL = 'claude-opus-4-6';
 const CLAUDE_MAX_OUTPUT_TOKENS = 128000;
 
