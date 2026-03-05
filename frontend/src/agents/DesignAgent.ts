@@ -8,6 +8,9 @@ import {
   getNamePrompt,
 } from './prompts';
 
+const OPENAI_MODEL = 'gpt-5-mini-2025-08-07';
+const CLAUDE_MODEL = 'claude-opus-4-6';
+
 export type AIProvider = 'openai' | 'claude';
 
 export interface DesignAgentConfig {
@@ -89,12 +92,11 @@ export class DesignAgent {
       }
 
       const completion = await this.openaiClient.chat.completions.create({
-        model: 'gpt-5.2',
+        model: OPENAI_MODEL,
         messages: [
           { role: 'system', content: NAME_SYSTEM_PROMPT },
           { role: 'user', content: prompt },
         ],
-        temperature: 0.4,
       });
 
       return (completion.choices[0]?.message?.content || 'Untitled Page').trim();
@@ -105,7 +107,7 @@ export class DesignAgent {
     }
 
     const response = await this.anthropicClient.messages.create({
-      model: 'claude-opus-4-6',
+      model: CLAUDE_MODEL,
       max_tokens: 50,
       system: NAME_SYSTEM_PROMPT,
       messages: [{ role: 'user', content: prompt }],
@@ -165,10 +167,9 @@ export class DesignAgent {
     ];
 
     const stream = await this.openaiClient.chat.completions.create({
-      model: 'gpt-5.2',
+      model: OPENAI_MODEL,
       messages,
       stream: true,
-      temperature: 0.7,
     });
 
     let fullResponse = '';
@@ -193,7 +194,7 @@ export class DesignAgent {
     }
 
     const stream = await this.anthropicClient.messages.stream({
-      model: 'claude-opus-4-6',
+      model: CLAUDE_MODEL,
       max_tokens: 4096,
       system: SYSTEM_PROMPT,
       messages: this.conversationHistory.map((msg) => ({
