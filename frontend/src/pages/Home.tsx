@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { nanoid } from 'nanoid';
-import { DesignAgent } from '../agents/DesignAgent';
+import { CLAUDE_MODEL, DesignAgent, OPENAI_MODEL } from '../agents/DesignAgent';
 import {
   savePageHtml,
   savePageHistory,
@@ -95,7 +95,7 @@ export default function Home() {
       // Detect provider from API key
       const provider = detectProvider(apiKey);
       const modelLabel =
-        provider === 'openai' ? 'gpt-5-mini-2025-08-07' : 'claude-opus-4-6';
+        provider === 'openai' ? OPENAI_MODEL : CLAUDE_MODEL;
 
       // Save config to session storage
       saveConfig({ apiKey, provider });
