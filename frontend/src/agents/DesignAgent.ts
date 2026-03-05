@@ -10,6 +10,7 @@ import {
 
 const OPENAI_MODEL = 'gpt-5-mini-2025-08-07';
 const CLAUDE_MODEL = 'claude-opus-4-6';
+const CLAUDE_MAX_OUTPUT_TOKENS = 163840; // 128k tokens
 
 export type AIProvider = 'openai' | 'claude';
 
@@ -195,7 +196,7 @@ export class DesignAgent {
 
     const stream = await this.anthropicClient.messages.stream({
       model: CLAUDE_MODEL,
-      max_tokens: 4096,
+      max_tokens: CLAUDE_MAX_OUTPUT_TOKENS,
       system: SYSTEM_PROMPT,
       messages: this.conversationHistory.map((msg) => ({
         role: msg.role as 'user' | 'assistant',

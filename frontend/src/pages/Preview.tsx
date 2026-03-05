@@ -391,10 +391,10 @@ export default function Preview() {
       {/* Left: Preview iframe */}
       <div className="flex-1 relative p-5 flex flex-col">
         <div className="mb-4 flex flex-col gap-3">
-          <div className="text-xs text-[var(--ink-muted)]">
-            Owner: {ownerName || 'Unknown'}
-          </div>
-          <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center rounded-full border border-[var(--border)] bg-white px-2 py-1 text-xs text-[var(--ink-muted)]">
+              Owner: {ownerName || 'Unknown'}
+            </span>
             <span className="inline-flex items-center rounded-full border border-[var(--border)] bg-white px-2 py-1 text-xs text-[var(--ink-muted)]">
               Model: {pageModel}
             </span>
