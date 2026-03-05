@@ -7,6 +7,7 @@ compatibility_date = "2023-12-18"
 EMAIL_CODE_SECRET = "Y4U7mM2ABgjAcya4wgzFLx7asPAQGm"
 ADMIN_EMAILS = "joway.w@gmail.com"
 RESEND_FROM_EMAIL = "brush@mail.elsetech.app"
+GOOGLE_CLIENT_ID = "102433646076-docrjifjv4egjkig4mpan8ctenccdqk8.apps.googleusercontent.com"
 
 # R2 bucket binding
 [[r2_buckets]]

@@ -142,6 +142,25 @@ export async function verifyEmailCode(
   return data as { token: string; user: StoredUser };
 }
 
+export async function verifyGoogleAuth(
+  idToken: string,
+  username?: string,
+  mode?: 'signin' | 'signup'
+): Promise<{ token: string; user: StoredUser }> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/google`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ idToken, username, mode }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to verify Google login');
+  }
+
+  return data as { token: string; user: StoredUser };
+}
+
 export async function fetchMe(): Promise<StoredUser> {
   const response = await fetch(`${API_BASE_URL}/api/me`, {
     headers: {

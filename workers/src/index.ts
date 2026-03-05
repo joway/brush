@@ -9,6 +9,7 @@ type Bindings = {
   RESEND_API_KEY?: string;
   RESEND_FROM_EMAIL?: string;
   EMAIL_CODE_SECRET: string;
+  GOOGLE_CLIENT_ID?: string;
   ADMIN_EMAILS?: string;
 };
 
@@ -39,6 +40,8 @@ const nowIso = (): string => new Date().toISOString();
 
 const isValidEmail = (email: string): boolean =>
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+const normalizeEmail = (email: string): string => email.trim().toLowerCase();
 
 const randomToken = (bytes = 32): string => {
   const data = new Uint8Array(bytes);
@@ -90,6 +93,71 @@ const sendVerificationEmail = async (
   }
 };
 
+const findUserByEmail = async (
+  c: any,
+  email: string
+): Promise<AuthUser | null> => {
+  const row = await c.env.DB.prepare(
+    'SELECT id, email, username FROM users WHERE lower(email) = ?1 LIMIT 1'
+  )
+    .bind(email)
+    .first();
+  return (row as AuthUser | null) ?? null;
+};
+
+const createSession = async (
+  c: any,
+  userId: number
+): Promise<{ token: string; expiresAt: string }> => {
+  const token = randomToken(32);
+  const tokenHash = await sha256Hex(token);
+  const now = nowIso();
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
+
+  await c.env.DB.prepare(
+    `INSERT INTO sessions (token_hash, user_id, expires_at, created_at)
+     VALUES (?1, ?2, ?3, ?4)`
+  )
+    .bind(tokenHash, userId, expiresAt, now)
+    .run();
+
+  return { token, expiresAt };
+};
+
+const verifyGoogleIdToken = async (
+  c: any,
+  idToken: string
+): Promise<{ email: string } | null> => {
+  const response = await fetch(
+    `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`
+  );
+  if (!response.ok) {
+    return null;
+  }
+
+  const tokenInfo = (await response.json()) as {
+    email?: string;
+    email_verified?: string;
+    aud?: string;
+  };
+
+  if (!tokenInfo.email || tokenInfo.email_verified !== 'true') {
+    return null;
+  }
+
+  const expectedClientId = c.env.GOOGLE_CLIENT_ID?.trim();
+  if (expectedClientId && tokenInfo.aud !== expectedClientId) {
+    return null;
+  }
+
+  const email = normalizeEmail(tokenInfo.email);
+  if (!isValidEmail(email)) {
+    return null;
+  }
+
+  return { email };
+};
+
 const getAuthUser = async (c: any): Promise<AuthUser | null> => {
   const auth = c.req.header('Authorization');
   if (!auth || !auth.startsWith('Bearer ')) {
@@ -110,9 +178,9 @@ const getAuthUser = async (c: any): Promise<AuthUser | null> => {
      WHERE s.token_hash = ?1 AND s.expires_at > ?2`
   )
     .bind(tokenHash, now)
-    .first<AuthUser>();
+    .first();
 
-  return row ?? null;
+  return (row as AuthUser | null) ?? null;
 };
 
 const requireAuth = async (c: any): Promise<AuthUser | Response> => {
@@ -152,7 +220,8 @@ const getPageMeta = async (c: any, uuid: string) => {
  */
 app.post('/api/auth/request-code', async (c) => {
   try {
-    const { email } = await c.req.json<{ email: string }>();
+    const payload = await c.req.json<{ email: string }>();
+    const email = normalizeEmail(payload.email || '');
     if (!email || !isValidEmail(email)) {
       return c.json({ error: 'Invalid email' }, 400);
     }
@@ -199,14 +268,18 @@ app.post('/api/auth/request-code', async (c) => {
  */
 app.post('/api/auth/verify-code', async (c) => {
   try {
-    const { email, code, username, mode } = await c.req.json<{
+    const payload = await c.req.json<{
       email: string;
       code: string;
       username?: string;
       mode?: 'signin' | 'signup';
     }>();
+    const email = normalizeEmail(payload.email || '');
+    const code = payload.code?.trim();
+    const username = payload.username;
+    const mode = payload.mode;
 
-    if (!email || !code) {
+    if (!email || !code || !isValidEmail(email)) {
       return c.json({ error: 'Email and code are required' }, 400);
     }
 
@@ -232,11 +305,7 @@ app.post('/api/auth/verify-code', async (c) => {
       .bind(email)
       .run();
 
-    let user = await c.env.DB.prepare(
-      'SELECT id, email, username FROM users WHERE email = ?1'
-    )
-      .bind(email)
-      .first<AuthUser>();
+    let user = await findUserByEmail(c, email);
 
     if (!user) {
       if (mode === 'signin') {
@@ -268,21 +337,73 @@ app.post('/api/auth/verify-code', async (c) => {
       return c.json({ error: 'Account already exists. Please sign in.' }, 400);
     }
 
-    const token = randomToken(32);
-    const tokenHash = await sha256Hex(token);
-    const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
-
-    await c.env.DB.prepare(
-      `INSERT INTO sessions (token_hash, user_id, expires_at, created_at)
-       VALUES (?1, ?2, ?3, ?4)`
-    )
-      .bind(tokenHash, user.id, expiresAt, now)
-      .run();
+    const { token } = await createSession(c, user.id);
 
     return c.json({ token, user });
   } catch (error) {
     console.error('Verify code error:', error);
     return c.json({ error: 'Failed to verify code' }, 500);
+  }
+});
+
+/**
+ * POST /api/auth/google
+ */
+app.post('/api/auth/google', async (c) => {
+  try {
+    const { idToken, username, mode } = await c.req.json<{
+      idToken: string;
+      username?: string;
+      mode?: 'signin' | 'signup';
+    }>();
+
+    if (!idToken || !idToken.trim()) {
+      return c.json({ error: 'Google idToken is required' }, 400);
+    }
+
+    const googleUser = await verifyGoogleIdToken(c, idToken.trim());
+    if (!googleUser) {
+      return c.json({ error: 'Invalid Google token' }, 401);
+    }
+
+    let user = await findUserByEmail(c, googleUser.email);
+
+    if (!user) {
+      if (mode === 'signin') {
+        return c.json({ error: 'Account not found. Please sign up.' }, 400);
+      }
+      if (!username || username.trim().length < 2) {
+        return c.json({ error: 'Username required', needsUsername: true }, 400);
+      }
+
+      const now = nowIso();
+      const cleanUsername = username.trim();
+
+      try {
+        const result = await c.env.DB.prepare(
+          `INSERT INTO users (email, username, created_at)
+           VALUES (?1, ?2, ?3)`
+        )
+          .bind(googleUser.email, cleanUsername, now)
+          .run();
+
+        user = {
+          id: Number(result.meta.last_row_id),
+          email: googleUser.email,
+          username: cleanUsername,
+        };
+      } catch (err) {
+        return c.json({ error: 'Username already taken' }, 400);
+      }
+    } else if (mode === 'signup') {
+      return c.json({ error: 'Account already exists. Please sign in.' }, 400);
+    }
+
+    const { token } = await createSession(c, user.id);
+    return c.json({ token, user });
+  } catch (error) {
+    console.error('Google auth error:', error);
+    return c.json({ error: 'Failed to authenticate with Google' }, 500);
   }
 });
 

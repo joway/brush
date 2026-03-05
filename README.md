@@ -96,7 +96,10 @@ npm run deploy
 
 ## Environment Variables
 
-No environment variables needed - all API keys are user-provided and stored in browser session only.
+- Workers vars: `GOOGLE_CLIENT_ID` (recommended, validates Google token audience)
+
+Google client ID in frontend is hard-coded at:
+- `frontend/src/utils/google.ts` -> `GOOGLE_CLIENT_ID`
 
 ## License
 

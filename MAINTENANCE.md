@@ -9,7 +9,7 @@ This document is for maintainers of the Magic Brush project (page-sharing site).
 - **Storage**:
   - HTML and history in R2
   - Relational data in D1
-- **Auth**: Email + verification code (Resend)
+- **Auth**: Email + verification code (Resend) and Google sign-in
 
 ---
 
@@ -34,6 +34,7 @@ Base URL: `https://<worker>.<subdomain>.workers.dev`
 Auth
 - `POST /api/auth/request-code`
 - `POST /api/auth/verify-code`
+- `POST /api/auth/google`
 - `GET /api/me`
 
 Pages
@@ -58,6 +59,7 @@ Set these secrets/vars in Workers:
 - `RESEND_API_KEY` (secret)
 - `RESEND_FROM_EMAIL` (vars)
 - `EMAIL_CODE_SECRET` (vars)
+- `GOOGLE_CLIENT_ID` (vars, optional but required for strict Google audience check)
 
 Local dev: use `workers/.dev.vars`.
 
@@ -102,6 +104,7 @@ npx wrangler secret put RESEND_API_KEY
 RESEND_FROM_EMAIL = "no-reply@yourdomain.com"
 EMAIL_CODE_SECRET = "your-random-secret"
 ADMIN_EMAILS = "admin1@example.com,admin2@example.com"
+GOOGLE_CLIENT_ID = "your-google-oauth-client-id.apps.googleusercontent.com"
 ```
 
 2. Apply migrations:
@@ -131,6 +134,7 @@ npx wrangler deploy
 ### 3) Smoke Tests
 
 - Sign in with email code
+- Sign in with Google
 - Create a new page
 - Toggle Public, Save, and refresh
 - Embed iframe in `example.html`
@@ -170,4 +174,4 @@ npx wrangler d1 migrations apply brush
 
 ## Last Updated
 
-2026-03-04
+2026-03-05
