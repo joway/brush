@@ -158,6 +158,53 @@ const verifyGoogleIdToken = async (
   return { email };
 };
 
+const usernameFromEmail = (email: string): string => {
+  const prefix = email.split('@')[0]?.trim().toLowerCase() || 'user';
+  const sanitized = prefix.replace(/[^a-z0-9._-]/g, '_').replace(/_+/g, '_');
+  return sanitized.slice(0, 24) || 'user';
+};
+
+const randomSuffix = (length = 6): string => {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  const data = new Uint8Array(length);
+  crypto.getRandomValues(data);
+  return Array.from(data)
+    .map((v) => chars[v % chars.length])
+    .join('');
+};
+
+const createUserWithUniqueUsername = async (
+  c: any,
+  email: string,
+  preferredUsername?: string
+): Promise<AuthUser | null> => {
+  const now = nowIso();
+  const base = (preferredUsername?.trim() || usernameFromEmail(email)).slice(0, 24);
+
+  for (let i = 0; i < 10; i++) {
+    const candidate = i === 0 ? base : `${base}_${randomSuffix(6)}`.slice(0, 31);
+    try {
+      const result = await c.env.DB.prepare(
+        `INSERT INTO users (email, username, created_at)
+         VALUES (?1, ?2, ?3)`
+      )
+        .bind(email, candidate, now)
+        .run();
+
+      return {
+        id: Number(result.meta.last_row_id),
+        email,
+        username: candidate,
+      };
+    } catch (err) {
+      // D1 unique conflict on username/email: retry with new suffix.
+      continue;
+    }
+  }
+
+  return null;
+};
+
 const getAuthUser = async (c: any): Promise<AuthUser | null> => {
   const auth = c.req.header('Authorization');
   if (!auth || !auth.startsWith('Bearer ')) {
@@ -372,28 +419,14 @@ app.post('/api/auth/google', async (c) => {
       if (mode === 'signin') {
         return c.json({ error: 'Account not found. Please sign up.' }, 400);
       }
-      if (!username || username.trim().length < 2) {
-        return c.json({ error: 'Username required', needsUsername: true }, 400);
+      const cleanUsername = username?.trim();
+      if (cleanUsername && cleanUsername.length < 2) {
+        return c.json({ error: 'Username too short' }, 400);
       }
 
-      const now = nowIso();
-      const cleanUsername = username.trim();
-
-      try {
-        const result = await c.env.DB.prepare(
-          `INSERT INTO users (email, username, created_at)
-           VALUES (?1, ?2, ?3)`
-        )
-          .bind(googleUser.email, cleanUsername, now)
-          .run();
-
-        user = {
-          id: Number(result.meta.last_row_id),
-          email: googleUser.email,
-          username: cleanUsername,
-        };
-      } catch (err) {
-        return c.json({ error: 'Username already taken' }, 400);
+      user = await createUserWithUniqueUsername(c, googleUser.email, cleanUsername);
+      if (!user) {
+        return c.json({ error: 'Failed to create account' }, 500);
       }
     } else if (mode === 'signup') {
       return c.json({ error: 'Account already exists. Please sign in.' }, 400);

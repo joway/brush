@@ -14,6 +14,18 @@ type GoogleGlobal = {
         client_id: string;
         callback: (response: GoogleCredentialResponse) => void;
       }) => void;
+      renderButton: (
+        parent: HTMLElement,
+        options: {
+          type?: 'standard' | 'icon';
+          theme?: 'outline' | 'filled_blue' | 'filled_black';
+          size?: 'large' | 'medium' | 'small';
+          text?: 'signin_with' | 'signup_with' | 'continue_with' | 'signin';
+          shape?: 'rectangular' | 'pill' | 'circle' | 'square';
+          logo_alignment?: 'left' | 'center';
+          width?: number;
+        }
+      ) => void;
       prompt: (
         listener?: (notification: GooglePromptMomentNotification) => void
       ) => void;
@@ -119,5 +131,45 @@ export const requestGoogleIdToken = async (
         reject(new Error('Google sign-in was cancelled or unavailable'));
       }
     });
+  });
+};
+
+export const renderGoogleButton = async (args: {
+  container: HTMLElement;
+  clientId: string;
+  text?: 'signin_with' | 'signup_with' | 'continue_with' | 'signin';
+  onCredential: (idToken: string) => void;
+  onError: (message: string) => void;
+}): Promise<void> => {
+  const { container, clientId, text = 'continue_with', onCredential, onError } = args;
+  await loadGoogleScript();
+
+  const google = window.google;
+  if (!google?.accounts?.id) {
+    onError('Google SDK unavailable');
+    return;
+  }
+
+  google.accounts.id.initialize({
+    client_id: clientId,
+    callback: (response) => {
+      const token = response.credential?.trim();
+      if (!token) {
+        onError('Google did not return an ID token');
+        return;
+      }
+      onCredential(token);
+    },
+  });
+
+  container.innerHTML = '';
+  google.accounts.id.renderButton(container, {
+    type: 'standard',
+    theme: 'outline',
+    size: 'large',
+    text,
+    shape: 'rectangular',
+    logo_alignment: 'left',
+    width: Math.max(260, Math.floor(container.clientWidth || 320)),
   });
 };

@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { requestEmailCode, verifyEmailCode, verifyGoogleAuth } from '../utils/api';
-import { getGoogleClientId, requestGoogleIdToken } from '../utils/google';
+import { getGoogleClientId, renderGoogleButton } from '../utils/google';
 import { saveAuth } from '../utils/storage';
 
 export default function SignUp() {
@@ -13,6 +13,9 @@ export default function SignUp() {
   const [isLoading, setIsLoading] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const googleClientId = getGoogleClientId();
+  const googleButtonRef = useRef<HTMLDivElement | null>(null);
+  const usernameRef = useRef('');
+  usernameRef.current = username.trim();
 
   const handleSendCode = async () => {
     if (!email.trim()) {
@@ -73,30 +76,35 @@ export default function SignUp() {
     }
   };
 
-  const handleGoogleSignUp = async () => {
-    if (!googleClientId) {
-      setStatus('Google sign-up is not configured. Please set client ID in src/utils/google.ts.');
-      return;
-    }
-    if (!username.trim()) {
-      setStatus('Please enter username first.');
+  useEffect(() => {
+    if (!googleClientId || !googleButtonRef.current) {
       return;
     }
 
-    setIsLoading(true);
-    setStatus('Opening Google sign-up...');
-    try {
-      const idToken = await requestGoogleIdToken(googleClientId);
-      const result = await verifyGoogleAuth(idToken, username.trim(), 'signup');
-      saveAuth(result.token, result.user);
-      setStatus('Account created with Google.');
-      navigate('/');
-    } catch (err) {
-      setStatus(err instanceof Error ? err.message : 'Google sign-up failed');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    void renderGoogleButton({
+      container: googleButtonRef.current,
+      clientId: googleClientId,
+      text: 'continue_with',
+      onCredential: async (idToken) => {
+        setIsLoading(true);
+        setStatus('Creating account with Google...');
+        try {
+          const preferredUsername = usernameRef.current || undefined;
+          const result = await verifyGoogleAuth(idToken, preferredUsername, 'signup');
+          saveAuth(result.token, result.user);
+          setStatus('Account created with Google.');
+          navigate('/');
+        } catch (err) {
+          setStatus(err instanceof Error ? err.message : 'Google sign-up failed');
+        } finally {
+          setIsLoading(false);
+        }
+      },
+      onError: (message) => {
+        setStatus(message);
+      },
+    });
+  }, [googleClientId, navigate]);
 
   return (
     <div className="min-h-screen bg-[var(--paper)] text-[var(--ink)]">
@@ -126,32 +134,19 @@ export default function SignUp() {
             Create an account with email verification.
           </p>
 
-          <div className="grid gap-3">
-            <button
-              onClick={handleGoogleSignUp}
-              disabled={isLoading}
-              className="w-full border border-[#dadce0] bg-white hover:bg-[#f8f9fa] text-[#3c4043] font-medium py-3 px-6 rounded-xl transition-all duration-200 disabled:opacity-60 flex items-center justify-center gap-3"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-                <path
-                  fill="#EA4335"
-                  d="M12 10.2v3.9h5.5c-.2 1.3-1.5 3.9-5.5 3.9-3.3 0-6-2.7-6-6s2.7-6 6-6c1.9 0 3.2.8 4 1.5l2.7-2.7C17 3.2 14.7 2.2 12 2.2 6.6 2.2 2.2 6.6 2.2 12s4.4 9.8 9.8 9.8c5.7 0 9.5-4 9.5-9.6 0-.6-.1-1.1-.1-1.6H12z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M3.3 7.5l3.2 2.3C7.3 8 9.5 6.4 12 6.4c1.9 0 3.2.8 4 1.5l2.7-2.7C17 3.2 14.7 2.2 12 2.2c-3.8 0-7.1 2.2-8.7 5.3z"
-                />
-                <path
-                  fill="#4A90E2"
-                  d="M12 21.8c2.6 0 4.9-.9 6.5-2.5l-3-2.5c-.8.5-1.9.9-3.5.9-3.9 0-5.4-2.6-5.6-3.8l-3.2 2.5c1.6 3.2 4.9 5.4 8.8 5.4z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M3.3 16.5l3.2-2.5c-.2-.5-.3-1.1-.3-2s.1-1.5.3-2L3.3 7.5C2.6 8.8 2.2 10.3 2.2 12s.4 3.2 1.1 4.5z"
-                />
-              </svg>
-              Continue with Google
-            </button>
+          <div className="grid gap-3 w-full max-w-[400px] mx-auto">
+            {googleClientId ? (
+              <div className={isLoading ? 'pointer-events-none opacity-60' : ''}>
+                <div ref={googleButtonRef} className="w-full min-h-[44px]" />
+              </div>
+            ) : (
+              <button
+                disabled
+                className="w-full border border-[#dadce0] bg-white text-[#3c4043] font-medium py-3 px-6 rounded-xl opacity-60"
+              >
+                Continue with Google (Not configured)
+              </button>
+            )}
             <div className="text-center text-xs text-[var(--ink-muted)]">or use email code</div>
             <input
               type="email"
@@ -194,7 +189,9 @@ export default function SignUp() {
               Create account
             </button>
             {status && (
-              <div className="text-xs text-[var(--ink-muted)]">{status}</div>
+              <div className={`rounded-lg border px-3 py-2 text-sm font-medium ${getStatusTone()}`}>
+                {status}
+              </div>
             )}
           </div>
 
@@ -209,3 +206,23 @@ export default function SignUp() {
     </div>
   );
 }
+  const getStatusTone = (): string => {
+    const text = status.toLowerCase();
+    if (
+      text.includes('failed') ||
+      text.includes('error') ||
+      text.includes('invalid') ||
+      text.includes('unauthorized') ||
+      text.includes('not found') ||
+      text.includes('already exists') ||
+      text.includes('required') ||
+      text.includes('cancel') ||
+      text.includes('too short')
+    ) {
+      return 'border-red-200 bg-red-50 text-red-700';
+    }
+    if (text.includes('account created')) {
+      return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+    }
+    return 'border-slate-200 bg-slate-50 text-slate-700';
+  };
