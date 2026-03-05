@@ -31,6 +31,7 @@ export default function Preview() {
     ConversationMessage[]
   >([]);
   const [pageName, setPageName] = useState('');
+  const [pageModel, setPageModel] = useState('unknown');
   const [nameDraft, setNameDraft] = useState('');
   const [isPublic, setIsPublic] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
@@ -75,6 +76,7 @@ export default function Preview() {
 
       const meta = await fetchPageMeta(uuid);
       setPageName(meta.name);
+      setPageModel(meta.model || 'unknown');
       setNameDraft(meta.name);
       setIsPublic(meta.public);
       setLikesCount(meta.likesCount);
@@ -391,6 +393,11 @@ export default function Preview() {
         <div className="mb-4 flex flex-col gap-3">
           <div className="text-xs text-[var(--ink-muted)]">
             Owner: {ownerName || 'Unknown'}
+          </div>
+          <div>
+            <span className="inline-flex items-center rounded-full border border-[var(--border)] bg-white px-2 py-1 text-xs text-[var(--ink-muted)]">
+              Model: {pageModel}
+            </span>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-3">

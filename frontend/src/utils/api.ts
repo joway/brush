@@ -18,6 +18,7 @@ export async function savePageHtml(
   html: string,
   metadata?: {
     name?: string;
+    model?: string;
     public?: boolean;
     createVersion?: boolean;
     versionNumber?: number;
@@ -188,6 +189,7 @@ export async function logout(): Promise<void> {
 export interface SquareItem {
   id: string;
   name: string;
+  model: string;
   likes_count: number;
   updated_at: string;
   created_at: string;
@@ -217,6 +219,7 @@ export async function fetchPages(
 export interface PageMeta {
   id: string;
   name: string;
+  model: string;
   public: boolean;
   likesCount: number;
   versionCount: number;

@@ -167,6 +167,11 @@ export default function Square() {
                     <p className="text-xs text-[var(--ink-muted)] mt-1">
                       by {item.owner_username}
                     </p>
+                    <div className="mt-2">
+                      <span className="inline-flex items-center rounded-full border border-[var(--border)] bg-[var(--paper-2)] px-2 py-1 text-[11px] text-[var(--ink-muted)]">
+                        {item.model || 'unknown'}
+                      </span>
+                    </div>
                   </div>
                   <button
                     onClick={(e) => {

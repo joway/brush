@@ -252,7 +252,7 @@ const isAdminEmail = (c: any, email: string): boolean => {
 
 const getPageMeta = async (c: any, uuid: string) => {
   return c.env.DB.prepare(
-    `SELECT p.id, p.owner_id, p.name, p.public, p.likes_count, p.version_count, p.created_at, p.updated_at,
+    `SELECT p.id, p.owner_id, p.name, p.model, p.public, p.likes_count, p.version_count, p.created_at, p.updated_at,
             u.username as owner_username
      FROM pages p
      JOIN users u ON u.id = p.owner_id
@@ -481,11 +481,20 @@ app.post('/api/page/save', async (c) => {
       return authUser;
     }
 
-    const { uuid, html, name, public: isPublic, createVersion, versionNumber } =
+    const {
+      uuid,
+      html,
+      name,
+      model,
+      public: isPublic,
+      createVersion,
+      versionNumber,
+    } =
       await c.req.json<{
         uuid: string;
         html: string;
         name?: string;
+        model?: string;
         public?: boolean;
         createVersion?: boolean;
         versionNumber?: number;
@@ -500,6 +509,7 @@ app.post('/api/page/save', async (c) => {
     }
 
     const now = nowIso();
+    const normalizedModel = model?.trim() || null;
     const existing = await c.env.DB.prepare(
       'SELECT owner_id FROM pages WHERE id = ?1'
     )
@@ -510,26 +520,28 @@ app.post('/api/page/save', async (c) => {
       const finalName = (name && name.trim()) || 'Untitled Page';
       const publicValue = isPublic === false ? 0 : 1;
       await c.env.DB.prepare(
-        `INSERT INTO pages (id, owner_id, name, public, likes_count, version_count, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, 0, 0, ?5, ?6)`
+        `INSERT INTO pages (id, owner_id, name, model, public, likes_count, version_count, created_at, updated_at)
+         VALUES (?1, ?2, ?3, COALESCE(?4, 'unknown'), ?5, 0, 0, ?6, ?7)`
       )
-        .bind(uuid, authUser.id, finalName, publicValue, now, now)
+        .bind(uuid, authUser.id, finalName, normalizedModel, publicValue, now, now)
         .run();
     } else if (existing.owner_id !== authUser.id) {
       return c.json({ error: 'Forbidden' }, 403);
     } else {
-      if (name || typeof isPublic === 'boolean') {
+      if (name || typeof isPublic === 'boolean' || normalizedModel) {
         await c.env.DB.prepare(
           `UPDATE pages
            SET name = COALESCE(?2, name),
                public = COALESCE(?3, public),
-               updated_at = ?4
+               model = COALESCE(?4, model),
+               updated_at = ?5
            WHERE id = ?1`
         )
           .bind(
             uuid,
             name ? name.trim() : null,
             typeof isPublic === 'boolean' ? (isPublic ? 1 : 0) : null,
+            normalizedModel,
             now
           )
           .run();
@@ -755,6 +767,7 @@ app.get('/api/page/:uuid', async (c) => {
     return c.json({
       id: meta.id,
       name: meta.name,
+      model: meta.model || 'unknown',
       public: meta.public === 1,
       likesCount: meta.likes_count,
       versionCount: meta.version_count ?? 0,
@@ -849,7 +862,7 @@ app.get('/api/pages', async (c) => {
       }
 
       const results = await c.env.DB.prepare(
-        `SELECT p.id, p.name, p.likes_count, p.updated_at, p.created_at,
+        `SELECT p.id, p.name, p.model, p.likes_count, p.updated_at, p.created_at,
                 u.username as owner_username,
                 CASE WHEN l.user_id IS NULL THEN 0 ELSE 1 END as liked
          FROM pages p
@@ -866,7 +879,7 @@ app.get('/api/pages', async (c) => {
     }
 
     const results = await c.env.DB.prepare(
-      `SELECT p.id, p.name, p.likes_count, p.updated_at, p.created_at,
+      `SELECT p.id, p.name, p.model, p.likes_count, p.updated_at, p.created_at,
               u.username as owner_username,
               CASE WHEN l.user_id IS NULL THEN 0 ELSE 1 END as liked
        FROM pages p

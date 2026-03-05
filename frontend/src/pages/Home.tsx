@@ -94,6 +94,8 @@ export default function Home() {
     try {
       // Detect provider from API key
       const provider = detectProvider(apiKey);
+      const modelLabel =
+        provider === 'openai' ? 'gpt-5-mini-2025-08-07' : 'claude-opus-4-6';
 
       // Save config to session storage
       saveConfig({ apiKey, provider });
@@ -149,6 +151,7 @@ export default function Home() {
       // Save HTML and history to R2
       await savePageHtml(uuid, html, {
         name: generatedName,
+        model: modelLabel,
         public: isPublic,
         createVersion: true,
         versionNumber: 1,
