@@ -269,6 +269,13 @@ export default function Preview() {
     }
   };
 
+  const handleOpenPreview = () => {
+    if (!uuid) {
+      return;
+    }
+    window.open(getPageEmbedUrl(uuid), '_blank', 'noopener,noreferrer');
+  };
+
   const handleCopyEmbed = async () => {
     if (!uuid) {
       return;
@@ -434,6 +441,12 @@ export default function Preview() {
                 className="rounded-xl border border-[var(--border)] bg-white px-3 py-2 text-xs text-[var(--ink)] hover:bg-[var(--paper-2)]"
               >
                 Download HTML
+              </button>
+              <button
+                onClick={handleOpenPreview}
+                className="rounded-xl border border-[var(--border)] bg-white px-3 py-2 text-xs text-[var(--ink)] hover:bg-[var(--paper-2)]"
+              >
+                Preview
               </button>
               <button
                 onClick={handleOpenEmbed}
