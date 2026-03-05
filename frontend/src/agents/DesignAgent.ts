@@ -3,8 +3,10 @@ import Anthropic from '@anthropic-ai/sdk';
 import {
   SYSTEM_PROMPT,
   NAME_SYSTEM_PROMPT,
+  MODIFY_TOOLS_SYSTEM_PROMPT,
   getDesignPrompt,
   getModificationPrompt,
+  getModificationToolPrompt,
   getNamePrompt,
 } from './prompts';
 
@@ -74,11 +76,23 @@ export class DesignAgent {
     userFeedback: string,
     options?: GenerateOptions
   ): Promise<string> {
-    const prompt = getModificationPrompt(currentHtml, userFeedback);
+    const toolPrompt = getModificationToolPrompt(currentHtml, userFeedback);
+    options?.onProgress?.('Planning edits...');
 
-    const html = await this.chat(prompt, options);
-
-    return this.extractHtml(html);
+    try {
+      const toolResponse = await this.chatOnce(
+        MODIFY_TOOLS_SYSTEM_PROMPT,
+        toolPrompt
+      );
+      const updatedHtml = this.applyHtmlEditPlan(currentHtml, toolResponse);
+      options?.onProgress?.('Applying edits...');
+      return updatedHtml;
+    } catch {
+      // Fallback to legacy full-html rewrite if tool planning fails.
+      const prompt = getModificationPrompt(currentHtml, userFeedback);
+      const html = await this.chatOnce(SYSTEM_PROMPT, prompt, options);
+      return this.extractHtml(html);
+    }
   }
 
   /**
@@ -151,6 +165,17 @@ export class DesignAgent {
     return response;
   }
 
+  private async chatOnce(
+    systemPrompt: string,
+    userMessage: string,
+    options?: GenerateOptions
+  ): Promise<string> {
+    if (this.provider === 'openai') {
+      return this.chatOpenAIOnce(systemPrompt, userMessage, options);
+    }
+    return this.chatClaudeOnce(systemPrompt, userMessage, options);
+  }
+
   /**
    * Call OpenAI API
    */
@@ -183,6 +208,33 @@ export class DesignAgent {
       }
     }
 
+    return fullResponse;
+  }
+
+  private async chatOpenAIOnce(
+    systemPrompt: string,
+    userMessage: string,
+    options?: GenerateOptions
+  ): Promise<string> {
+    if (!this.openaiClient) {
+      throw new Error('OpenAI client not initialized');
+    }
+
+    const stream = await this.openaiClient.chat.completions.create({
+      model: OPENAI_MODEL,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMessage },
+      ],
+      stream: true,
+    });
+
+    let fullResponse = '';
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content || '';
+      fullResponse += content;
+      options?.onProgress?.(content);
+    }
     return fullResponse;
   }
 
@@ -222,6 +274,36 @@ export class DesignAgent {
     return fullResponse;
   }
 
+  private async chatClaudeOnce(
+    systemPrompt: string,
+    userMessage: string,
+    options?: GenerateOptions
+  ): Promise<string> {
+    if (!this.anthropicClient) {
+      throw new Error('Anthropic client not initialized');
+    }
+
+    const stream = await this.anthropicClient.messages.stream({
+      model: CLAUDE_MODEL,
+      max_tokens: CLAUDE_MAX_OUTPUT_TOKENS,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userMessage }],
+    });
+
+    let fullResponse = '';
+    for await (const chunk of stream) {
+      if (
+        chunk.type === 'content_block_delta' &&
+        chunk.delta.type === 'text_delta'
+      ) {
+        const content = chunk.delta.text;
+        fullResponse += content;
+        options?.onProgress?.(content);
+      }
+    }
+    return fullResponse;
+  }
+
   /**
    * Extract HTML from AI response (remove markdown code blocks if present)
    */
@@ -241,6 +323,103 @@ export class DesignAgent {
     }
 
     return html.trim();
+  }
+
+  private extractJson(response: string): string {
+    const cleaned = response
+      .replace(/^```json\s*/i, '')
+      .replace(/^```\s*/i, '')
+      .replace(/\s*```$/i, '')
+      .trim();
+
+    const firstBrace = cleaned.indexOf('{');
+    const lastBrace = cleaned.lastIndexOf('}');
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      return cleaned.slice(firstBrace, lastBrace + 1);
+    }
+    throw new Error('Invalid JSON edit plan');
+  }
+
+  private applyHtmlEditPlan(currentHtml: string, response: string): string {
+    const json = this.extractJson(response);
+    const parsed = JSON.parse(json) as {
+      edits?: Array<{
+        tool?: string;
+        selector?: string;
+        value?: string;
+        attr?: string;
+      }>;
+    };
+
+    const edits = parsed.edits || [];
+    if (edits.length === 0) {
+      throw new Error('No edits returned');
+    }
+
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(currentHtml, 'text/html');
+    let applied = 0;
+
+    for (const edit of edits) {
+      const tool = edit.tool;
+      const selector = edit.selector;
+      const value = edit.value ?? '';
+      const attr = edit.attr;
+      if (!tool || !selector) {
+        continue;
+      }
+
+      const target = doc.querySelector(selector);
+      if (!target) {
+        continue;
+      }
+
+      switch (tool) {
+        case 'replace_inner_html':
+          target.innerHTML = value;
+          applied++;
+          break;
+        case 'replace_outer_html':
+          target.outerHTML = value;
+          applied++;
+          break;
+        case 'set_text':
+          target.textContent = value;
+          applied++;
+          break;
+        case 'set_attr':
+          if (attr) {
+            target.setAttribute(attr, value);
+            applied++;
+          }
+          break;
+        case 'remove':
+          target.remove();
+          applied++;
+          break;
+        case 'append_html':
+          target.insertAdjacentHTML('beforeend', value);
+          applied++;
+          break;
+        case 'prepend_html':
+          target.insertAdjacentHTML('afterbegin', value);
+          applied++;
+          break;
+        case 'set_script':
+        case 'set_style':
+          target.textContent = value;
+          applied++;
+          break;
+        default:
+          break;
+      }
+    }
+
+    if (applied === 0) {
+      throw new Error('No valid edits applied');
+    }
+
+    return `<!DOCTYPE html>\n${doc.documentElement.outerHTML}`;
   }
 
   /**

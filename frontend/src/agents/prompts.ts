@@ -18,6 +18,27 @@ Return a short, clear page name.
 Use the same language as the user's description.
 Return ONLY the name text, no quotes, no extra punctuation.`;
 
+export const MODIFY_TOOLS_SYSTEM_PROMPT = `You are an HTML editing planner.
+Do NOT output full HTML.
+Return ONLY valid JSON with this shape:
+{
+  "edits": [
+    {
+      "tool": "replace_inner_html|replace_outer_html|set_text|set_attr|remove|append_html|prepend_html|set_script|set_style",
+      "selector": "valid CSS selector",
+      "value": "string value when needed",
+      "attr": "attribute name for set_attr"
+    }
+  ]
+}
+
+Rules:
+- Prefer minimal edits that satisfy the request.
+- Keep all existing functionality unless user asks to remove it.
+- Keep language consistency with the existing page.
+- For set_script/set_style: use selector to target the specific <script>/<style> tag and put full new code in "value".
+- If an edit cannot be done safely, skip it (do not invent selectors).`;
+
 // Generate the design prompt based on user description
 export const getDesignPrompt = (userDescription: string): string => {
   return `User Page Description:
@@ -49,6 +70,20 @@ CRITICAL:
 - Do not include markdown code blocks
 - Start with <!DOCTYPE html>
 - Maintain the same language as the original`;
+};
+
+export const getModificationToolPrompt = (
+  currentHtml: string,
+  userFeedback: string
+): string => {
+  return `Current HTML page:
+${currentHtml}
+
+User Feedback:
+${userFeedback}
+
+Plan the smallest set of DOM-level edits to satisfy the feedback.
+Return ONLY the JSON edit plan.`;
 };
 
 // Generate a short product name based on user description
