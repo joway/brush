@@ -22,10 +22,20 @@ type AuthUser = {
 const app = new Hono<{ Bindings: Bindings }>();
 
 // Enable CORS for frontend
+const ALLOWED_ORIGINS = [
+  'https://brush.elsetech.app',
+  'http://localhost:5173',
+  'http://localhost:4173',
+  'http://localhost:8787',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:4173',
+  'http://127.0.0.1:8787',
+];
+
 app.use(
   '/*',
   cors({
-    origin: (origin) => origin ?? '*',
+    origin: (origin) => (ALLOWED_ORIGINS.includes(origin) ? origin : null),
     allowHeaders: ['Content-Type', 'Authorization'],
     allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
   })
@@ -504,6 +514,10 @@ app.post('/api/page/save', async (c) => {
       return c.json({ error: 'Missing uuid or html' }, 400);
     }
 
+    if (html.length > 500_000) {
+      return c.json({ error: 'HTML content too large (max 500KB)' }, 413);
+    }
+
     if (!/^[a-zA-Z0-9_-]+$/.test(uuid)) {
       return c.json({ error: 'Invalid uuid format' }, 400);
     }
@@ -621,7 +635,15 @@ app.get('/pages/:uuid', async (c) => {
     }
 
     const html = await object.text();
-    return c.html(html);
+    return new Response(html, {
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Content-Security-Policy':
+          "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; sandbox allow-scripts allow-forms allow-popups allow-modals allow-same-origin",
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'SAMEORIGIN',
+      },
+    });
   } catch (error) {
     console.error('Error fetching HTML:', error);
     return c.text('Failed to fetch HTML', 500);
